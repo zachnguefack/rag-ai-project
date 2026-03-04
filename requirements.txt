@@ -1,0 +1,11 @@
+langchain
+langchain-core
+langchain-community
+langchain-openai
+pypdf
+pymupdf
+sentence-transformers
+langchain-huggingface
+faiss-cpu
+chromadb
+python-dotenv

@@ -1,0 +1,15 @@
+Cloud Infrastructure Overview
+
+Cloud infrastructure refers to the collection of hardware and software components
+that enable cloud computing services. It allows organizations to deploy scalable,
+flexible, and cost-efficient IT environments.
+
+Key Features:
+- Virtualization technologies
+- On-demand resource provisioning
+- High availability and redundancy
+- Automated scaling
+- Centralized management and monitoring
+
+Cloud infrastructure is widely used in modern enterprises to support digital
+transformation, application hosting, data storage, and disaster recovery strategies.
