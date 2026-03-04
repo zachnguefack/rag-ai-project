@@ -82,7 +82,7 @@ from rag_v2.answer import AnswerPolicy
 
 policy = AnswerPolicy(
     mode="balanced",  # keep balanced style if evidence exists
-    strict_document_scope=True,
+    strict
     min_results=2,
     min_confidence=0.40,
 )
