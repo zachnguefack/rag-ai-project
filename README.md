@@ -111,3 +111,33 @@ python main.py \
 - Use `strict_document_scope=True` for enterprise use cases that must avoid general-knowledge fallback.
 - Use `balanced` mode with `strict_document_scope=False` for assistant behavior with controlled fallback.
 - Keep chunk size/overlap and retrieval thresholds configurable based on benchmark data.
+
+## Enterprise FastAPI backend blueprint
+
+For a production-ready enterprise backend architecture (API, security, RBAC, document management, RAG engine, vector DB, audit logging, and configuration management), see:
+
+- `docs/enterprise_fastapi_backend_architecture.md`
+
+## FastAPI backend implementation
+
+A working backend implementation based on the enterprise architecture is available under `backend/`.
+
+### Quick run
+
+```bash
+cd backend
+uvicorn app.main:app --reload --port 8000
+```
+
+### Example API interaction with RAG
+
+1. Authenticate:
+   - `POST /v1/auth/login` with JSON `{"username":"admin","password":"admin"}`
+2. Call chat endpoint:
+   - `POST /v1/chat/ask` with bearer token and JSON `{"question":"What is the onboarding policy?","top_k":3}`
+3. Backend flow:
+   - API router -> RBAC permission check (`rag:query`) -> `RAGService`
+   - `HybridRetriever` retrieves context chunks
+   - `AnswerBuilder` builds final response + citations
+
+See `backend/README.md` for module-level documentation.
