@@ -2,140 +2,117 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence
 
-from langchain_community.document_loaders import (
-    DirectoryLoader,
-    PyMuPDFLoader,
-    TextLoader,
-    CSVLoader,
-    Docx2txtLoader,
-)
+from langchain_community.document_loaders import CSVLoader, Docx2txtLoader, PyMuPDFLoader, TextLoader
 from langchain_community.document_loaders.excel import UnstructuredExcelLoader
+from langchain_core.documents import Document
 
 try:
     import pandas as pd
-except Exception:
+except Exception:  # optional dependency
     pd = None
 
-logger = logging.getLogger("rag_v2.data_loader")
+LOGGER = logging.getLogger("rag_v2.ingestion")
 
 
-def _setup_logger(level: str = "INFO") -> None:
-    if logger.handlers:
-        return
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
+@dataclass(slots=True)
+class IngestionReport:
+    total_files: int = 0
+    loaded_files: int = 0
+    failed_files: int = 0
+    total_documents: int = 0
+    by_extension: Dict[str, int] = field(default_factory=dict)
 
 
-def _normalize_metadata(md: Dict[str, Any], file_path: Path) -> Dict[str, Any]:
-    md = dict(md or {})
-    md["source"] = str(file_path)
-    md["file_name"] = file_path.name
-    md["ext"] = file_path.suffix.lower().lstrip(".")
-    md["loaded_at"] = datetime.utcnow().isoformat() + "Z"
-    return md
+class DocumentIngestionPipeline:
+    """Robust ingestion with extension-aware loaders and metadata normalization."""
 
+    SUPPORTED_EXTENSIONS: Sequence[str] = (".pdf", ".txt", ".csv", ".docx", ".xlsx", ".json")
 
-def _load_json_as_text(file_path: Path) -> List[Any]:
-    from langchain_core.documents import Document
-    try:
-        obj = json.loads(file_path.read_text(encoding="utf-8"))
-    except Exception:
-        obj = json.loads(file_path.read_text(encoding="utf-8-sig"))
-    text = json.dumps(obj, ensure_ascii=False, indent=2)
-    return [Document(page_content=text, metadata={"source": str(file_path)})]
+    def __init__(self, log_level: str = "INFO"):
+        logging.basicConfig(
+            level=getattr(logging, log_level.upper(), logging.INFO),
+            format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        )
 
+    @staticmethod
+    def _normalize_metadata(md: Dict[str, Any], source_file: Path) -> Dict[str, Any]:
+        md = dict(md or {})
+        md["source"] = str(source_file.resolve())
+        md["file_name"] = source_file.name
+        md["ext"] = source_file.suffix.lower().lstrip(".")
+        md["loaded_at"] = datetime.now(tz=timezone.utc).isoformat()
+        return md
 
-def _load_excel_fallback(file_path: Path) -> List[Any]:
-    from langchain_core.documents import Document
-    if pd is None:
-        raise RuntimeError("pandas not installed; cannot fallback-load Excel")
-    df = pd.read_excel(file_path)
-    return [Document(page_content=df.to_csv(index=False), metadata={"source": str(file_path)})]
-
-
-def load_all_documents(data_dir: str, log_level: str = "INFO") -> List[Any]:
-    """
-    Hybrid loader:
-    - PDFs: DirectoryLoader + PyMuPDFLoader (fast, multithreaded, progress)
-    - Others: per-file loaders with fallbacks
-    """
-    _setup_logger(log_level)
-
-    data_path = Path(data_dir).resolve()
-    if not data_path.exists():
-        raise FileNotFoundError(f"Data directory not found: {data_path}")
-
-    documents: List[Any] = []
-
-    # 1) PDFs (fast path)
-    pdf_dir_loader = DirectoryLoader(
-        path=str(data_path),
-        glob="**/*.pdf",
-        loader_cls=PyMuPDFLoader,
-        show_progress=True,
-        use_multithreading=True,
-    )
-    pdf_docs = pdf_dir_loader.load()
-    for d in pdf_docs:
-        src = Path(d.metadata.get("source", ""))
-        if src.exists():
-            d.metadata = _normalize_metadata(d.metadata, src)
-    documents.extend(pdf_docs)
-    logger.info("Loaded PDFs: %d", len(pdf_docs))
-
-    # 2) Other formats (robust path)
-    supported = {".txt", ".csv", ".xlsx", ".docx", ".json"}
-    files = [p for p in data_path.glob("**/*") if p.is_file() and p.suffix.lower() in supported]
-
-    for file_path in files:
-        ext = file_path.suffix.lower()
+    @staticmethod
+    def _load_json(path: Path) -> List[Document]:
         try:
-            if ext == ".txt":
-                loaded = TextLoader(str(file_path), encoding="utf-8").load()
-            elif ext == ".csv":
-                loaded = CSVLoader(str(file_path)).load()
-            elif ext == ".docx":
-                loaded = Docx2txtLoader(str(file_path)).load()
-            elif ext == ".xlsx":
-                try:
-                    loaded = UnstructuredExcelLoader(str(file_path)).load()
-                except Exception as e:
-                    logger.warning("UnstructuredExcelLoader failed for %s (%s). Using pandas fallback.", file_path.name, e)
-                    loaded = _load_excel_fallback(file_path)
-            elif ext == ".json":
-                loaded = _load_json_as_text(file_path)
-            else:
-                loaded = []
+            obj = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            obj = json.loads(path.read_text(encoding="utf-8-sig"))
+        return [Document(page_content=json.dumps(obj, ensure_ascii=False, indent=2), metadata={"source": str(path)})]
 
-            for d in loaded:
-                d.metadata = _normalize_metadata(getattr(d, "metadata", {}) or {}, file_path)
+    @staticmethod
+    def _load_xlsx_fallback(path: Path) -> List[Document]:
+        if pd is None:
+            raise RuntimeError("pandas unavailable for Excel fallback")
+        df = pd.read_excel(path)
+        return [Document(page_content=df.to_csv(index=False), metadata={"source": str(path)})]
 
-            documents.extend(loaded)
-            logger.info("Loaded %-6s %s -> %d docs", ext, file_path.name, len(loaded))
+    def _load_single_file(self, path: Path) -> List[Document]:
+        ext = path.suffix.lower()
+        if ext == ".pdf":
+            return PyMuPDFLoader(str(path)).load()
+        if ext == ".txt":
+            return TextLoader(str(path), encoding="utf-8").load()
+        if ext == ".csv":
+            return CSVLoader(str(path)).load()
+        if ext == ".docx":
+            return Docx2txtLoader(str(path)).load()
+        if ext == ".xlsx":
+            try:
+                return UnstructuredExcelLoader(str(path)).load()
+            except Exception as exc:
+                LOGGER.warning("Excel unstructured loader failed for %s (%s). Fallback to pandas.", path.name, exc)
+                return self._load_xlsx_fallback(path)
+        if ext == ".json":
+            return self._load_json(path)
+        return []
 
-        except Exception as e:
-            logger.error("Failed to load %s: %s", file_path, e)
+    def load_documents(self, data_dir: str | Path) -> tuple[List[Document], IngestionReport]:
+        base = Path(data_dir).resolve()
+        if not base.exists():
+            raise FileNotFoundError(f"Data directory not found: {base}")
 
-    logger.info("Total loaded documents: %d", len(documents))
-    return documents
+        files = [p for p in base.glob("**/*") if p.is_file() and p.suffix.lower() in self.SUPPORTED_EXTENSIONS]
+        report = IngestionReport(total_files=len(files))
+        docs: List[Document] = []
+
+        for file_path in files:
+            ext = file_path.suffix.lower()
+            try:
+                loaded = self._load_single_file(file_path)
+                if not loaded:
+                    continue
+                for doc in loaded:
+                    doc.metadata = self._normalize_metadata(getattr(doc, "metadata", {}) or {}, file_path)
+                docs.extend(loaded)
+                report.loaded_files += 1
+                report.by_extension[ext] = report.by_extension.get(ext, 0) + len(loaded)
+            except Exception as exc:
+                report.failed_files += 1
+                LOGGER.exception("Failed to load file=%s: %s", file_path, exc)
+
+        report.total_documents = len(docs)
+        LOGGER.info("Ingestion complete. files=%s loaded=%s failed=%s docs=%s", report.total_files, report.loaded_files, report.failed_files, report.total_documents)
+        return docs, report
 
 
-
-if __name__ == "__main__":
-    print("=== Testing data loader ===")
-
-    docs = load_all_documents("data", log_level="INFO")
-
-    print(f"\nLoaded {len(docs)} documents.")
-
-    if docs:
-        print("\nExample document preview:")
-        print("Content preview:", docs[0].page_content[:300])
-        print("Metadata:", docs[0].metadata)
+def load_all_documents(data_dir: str, log_level: str = "INFO"):
+    pipeline = DocumentIngestionPipeline(log_level=log_level)
+    docs, _ = pipeline.load_documents(data_dir)
+    return docs
