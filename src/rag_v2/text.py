@@ -1,24 +1,14 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Tuple
-from langdetect import detect, DetectorFactory
+from typing import Any, Dict, Iterable, List, Tuple
+
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langdetect import DetectorFactory, detect
 
 DetectorFactory.seed = 42
 SUPPORTED_LANGS = {"fr", "en", "it"}
-
-
-def detect_language_safe(text: str) -> str:
-    if not text:
-        return "unknown"
-    compact = re.sub(r"\s+", " ", text).strip()
-    if len(compact) < 40:
-        return "unknown"
-    try:
-        lang = detect(compact)
-        return lang if lang in SUPPORTED_LANGS else "other"
-    except Exception:
-        return "unknown"
 
 
 def clean_text(text: str) -> str:
@@ -30,46 +20,55 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def prepare_chunks(chunks: List[Any]) -> Tuple[List[Any], List[str]]:
-    filtered: List[Any] = []
-    texts: List[str] = []
+def detect_language_safe(text: str) -> str:
+    compact = re.sub(r"\s+", " ", text or "").strip()
+    if len(compact) < 40:
+        return "unknown"
+    try:
+        lang = detect(compact)
+    except Exception:
+        return "unknown"
+    return lang if lang in SUPPORTED_LANGS else "other"
 
-    for doc in chunks:
-        raw = getattr(doc, "page_content", "") or ""
-        cleaned = clean_text(raw)
-        if not cleaned:
+
+def split_documents(
+    documents: Iterable[Document],
+    chunk_size: int = 900,
+    chunk_overlap: int = 140,
+) -> List[Document]:
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+
+    prepared_docs: List[Document] = []
+    for doc in documents:
+        content = clean_text(getattr(doc, "page_content", "") or "")
+        if not content:
             continue
+        metadata: Dict[str, Any] = dict(getattr(doc, "metadata", {}) or {})
+        metadata["lang"] = detect_language_safe(content)
+        prepared_docs.append(Document(page_content=content, metadata=metadata))
 
-        doc.page_content = cleaned
-        md: Dict[str, Any] = getattr(doc, "metadata", {}) or {}
-
-        if "source" in md:
-            md["source"] = str(md["source"])
-
-        if "page" in md:
-            try:
-                md["page"] = int(md["page"])
-            except Exception:
-                md["page"] = 0
-
-        md["lang"] = detect_language_safe(cleaned)
-
-        doc.metadata = md
-        filtered.append(doc)
-        texts.append(cleaned)
-
-    return filtered, texts
+    chunks = splitter.split_documents(prepared_docs)
+    return assign_chunk_indices(chunks)
 
 
-def assign_chunk_index_per_page(chunks: List[Any]) -> List[Any]:
+def assign_chunk_indices(chunks: List[Document]) -> List[Document]:
     counters: Dict[Tuple[str, int], int] = {}
-    for doc in chunks:
-        md = getattr(doc, "metadata", {}) or {}
-        src = str(md.get("source") or md.get("file_path") or "unknown_source")
+    for chunk in chunks:
+        md = dict(getattr(chunk, "metadata", {}) or {})
+        source = str(md.get("source") or "unknown_source")
         page = int(md.get("page") or 0)
-        key = (src, page)
-        counters[key] = counters.get(key, 0) + 1
-        md["chunk_index"] = counters[key] - 1
-        md["chunk_len"] = len(getattr(doc, "page_content", "") or "")
-        doc.metadata = md
+        key = (source, page)
+        idx = counters.get(key, 0)
+        counters[key] = idx + 1
+
+        md["source"] = source
+        md["page"] = page
+        md["chunk_index"] = idx
+        md["chunk_len"] = len(chunk.page_content)
+        chunk.metadata = md
+
     return chunks

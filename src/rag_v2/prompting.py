@@ -3,59 +3,51 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 
-def build_context_with_citations(results: List[Dict[str, Any]], max_chars_per_chunk: int = 1200) -> str:
+SYSTEM_PROMPT_STRICT = """You are an enterprise documentation assistant.
+Rules:
+- Use only the supplied CONTEXT.
+- If context is insufficient, reply exactly: \"Insufficient evidence in provided documents.\"
+- Every factual claim must include one citation tag like [C1].
+- Never fabricate citations.
+"""
+
+
+SYSTEM_PROMPT_BALANCED = """You are a helpful assistant.
+Use provided CONTEXT first. If insufficient, you can use general knowledge.
+Rules:
+- Cite document-grounded claims with [C#].
+- If using general knowledge, do not add fake citations.
+"""
+
+
+def build_context(results: List[Dict[str, Any]], max_chars_per_chunk: int = 1400) -> str:
     blocks = []
-    for i, r in enumerate(results, start=1):
-        md = r.get("metadata", {}) or {}
-        source = str(md.get("source", "Document"))
-        page = md.get("page", None)
+    for i, row in enumerate(results, start=1):
+        md = row.get("metadata", {}) or {}
+        source = md.get("source", "Document")
+        page = md.get("page")
         page_disp = page + 1 if isinstance(page, int) else page
-
-        text = (r.get("content") or "").strip()
-        if len(text) > max_chars_per_chunk:
-            text = text[:max_chars_per_chunk] + "..."
-
-        citation = f"[C{i} | {source} | p.{page_disp}]"
-        blocks.append(f"{citation}\n{text}")
-
+        content = (row.get("content") or "").strip()
+        if len(content) > max_chars_per_chunk:
+            content = content[:max_chars_per_chunk] + "..."
+        blocks.append(f"[C{i} | {source} | p.{page_disp}]\n{content}")
     return "\n\n---\n\n".join(blocks)
 
 
-SYSTEM_PROMPT_STRICT = """You are an internal documentation assistant.
-Rules:
-- Use ONLY the provided CONTEXT.
-- If the CONTEXT does not contain enough information, answer exactly:
-  "Insufficient evidence in provided documents."
-- Do NOT invent procedures, steps, numbers, or compliance statements.
-- Every key statement must include at least one citation tag like [C1] or [C2].
-"""
-
-
-SYSTEM_PROMPT_PERSONAL = """You are a helpful assistant.
-
-You may use:
-1) Provided CONTEXT (documents)
-2) Your general knowledge (ChatGPT)
-
-Rules:
-- If context is strong and relevant, use it and cite with [C#].
-- If context is weak or insufficient, answer using general knowledge.
-- NEVER invent citations.
-- If using general knowledge, do not add citation tags.
-- Keep answer clear and structured.
-"""
-
-
 def build_user_prompt(question: str, context: str) -> str:
-    return f"""CONTEXT:
-{context}
+    return (
+        "CONTEXT:\n"
+        f"{context}\n\n"
+        "QUESTION:\n"
+        f"{question}\n\n"
+        "OUTPUT:\n"
+        "- Provide a concise and factual answer.\n"
+        "- Use bullet points for steps/procedures.\n"
+        "- Add citation tags such as [C1].\n"
+    )
 
-QUESTION:
-{question}
 
-OUTPUT FORMAT:
-- Provide a clear answer.
-- Use bullet points for procedures/steps.
-- Add citations like [C1] after the statements they support.
-- If insufficient: "Insufficient evidence in provided documents."
-"""
+# Backward-compatible aliases
+SYSTEM_PROMPT_PERSONAL = SYSTEM_PROMPT_BALANCED
+def build_context_with_citations(results, max_chars_per_chunk=1400):
+    return build_context(results, max_chars_per_chunk=max_chars_per_chunk)
