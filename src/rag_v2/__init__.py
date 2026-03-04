@@ -6,6 +6,7 @@ from .embeddings import EmbeddingManager
 from .store import VectorStore
 from .retrieval import RAGRetriever
 from .answer import RAGService
+from .smart_indexing import IndexStateStore, SmartIndexer
 
 __all__ = [
     "AppConfig",
@@ -16,4 +17,6 @@ __all__ = [
     "VectorStore",
     "RAGRetriever",
     "RAGService",
+    "IndexStateStore",
+    "SmartIndexer",
 ]
