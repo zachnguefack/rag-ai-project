@@ -16,6 +16,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", choices=["strict", "balanced"], default="balanced", help="Answer generation mode")
     parser.add_argument("--force-reindex", action="store_true", help="Rebuild the full index regardless of file changes")
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_CONFIG.data_dir, help="Directory containing source documents")
+    parser.add_argument(
+        "--strict-document-scope",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_CONFIG.strict_document_scope,
+        help="Enable/disable document-only answering when retrieval evidence is weak",
+    )
     return parser
 
 
@@ -69,6 +75,7 @@ def main() -> None:
             lambda_mult=config.mmr_lambda,
             min_results=config.strict_min_results,
             min_confidence=config.strict_min_confidence,
+            strict_document_scope=args.strict_document_scope,
         ),
     )
 

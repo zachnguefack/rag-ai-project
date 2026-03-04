@@ -31,6 +31,7 @@ class AppConfig:
 
     strict_min_results: int = 2
     strict_min_confidence: float = 0.40
+    strict_document_scope: bool = False
 
 
 DEFAULT_CONFIG = AppConfig()
