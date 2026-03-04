@@ -111,3 +111,9 @@ python main.py \
 - Use `strict_document_scope=True` for enterprise use cases that must avoid general-knowledge fallback.
 - Use `balanced` mode with `strict_document_scope=False` for assistant behavior with controlled fallback.
 - Keep chunk size/overlap and retrieval thresholds configurable based on benchmark data.
+
+## Enterprise FastAPI backend blueprint
+
+For a production-ready enterprise backend architecture (API, security, RBAC, document management, RAG engine, vector DB, audit logging, and configuration management), see:
+
+- `docs/enterprise_fastapi_backend_architecture.md`
