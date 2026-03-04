@@ -83,16 +83,19 @@ class DocumentIngestionPipeline:
             return self._load_json(path)
         return []
 
-    def load_documents(self, data_dir: str | Path) -> tuple[List[Document], IngestionReport]:
-        base = Path(data_dir).resolve()
-        if not base.exists():
-            raise FileNotFoundError(f"Data directory not found: {base}")
+    def load_file_paths(self, file_paths: Sequence[Path]) -> tuple[List[Document], IngestionReport]:
+        """Load a pre-filtered list of files.
 
-        files = [p for p in base.glob("**/*") if p.is_file() and p.suffix.lower() in self.SUPPORTED_EXTENSIONS]
-        report = IngestionReport(total_files=len(files))
+        Args:
+            file_paths: Files to load.
+
+        Returns:
+            Tuple of loaded documents and ingestion report.
+        """
+        report = IngestionReport(total_files=len(file_paths))
         docs: List[Document] = []
 
-        for file_path in files:
+        for file_path in file_paths:
             ext = file_path.suffix.lower()
             try:
                 loaded = self._load_single_file(file_path)
@@ -108,8 +111,22 @@ class DocumentIngestionPipeline:
                 LOGGER.exception("Failed to load file=%s: %s", file_path, exc)
 
         report.total_documents = len(docs)
-        LOGGER.info("Ingestion complete. files=%s loaded=%s failed=%s docs=%s", report.total_files, report.loaded_files, report.failed_files, report.total_documents)
+        LOGGER.info(
+            "Ingestion complete. files=%s loaded=%s failed=%s docs=%s",
+            report.total_files,
+            report.loaded_files,
+            report.failed_files,
+            report.total_documents,
+        )
         return docs, report
+
+    def load_documents(self, data_dir: str | Path) -> tuple[List[Document], IngestionReport]:
+        base = Path(data_dir).resolve()
+        if not base.exists():
+            raise FileNotFoundError(f"Data directory not found: {base}")
+
+        files = [p for p in base.glob("**/*") if p.is_file() and p.suffix.lower() in self.SUPPORTED_EXTENSIONS]
+        return self.load_file_paths(files)
 
 
 def load_all_documents(data_dir: str, log_level: str = "INFO"):

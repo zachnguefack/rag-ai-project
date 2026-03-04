@@ -80,3 +80,16 @@ class VectorStore:
 
         self.collection.upsert(ids=ids, embeddings=embs, metadatas=metadatas, documents=docs_text)
         LOGGER.info("Upsert complete chunks=%s total=%s", len(ids), self.collection.count())
+
+    def delete_by_source(self, source: str) -> None:
+        """Delete all chunks associated with a source file."""
+        self.collection.delete(where={"source": source})
+        LOGGER.info("Deleted chunks for source=%s", source)
+
+    def reset_collection(self) -> None:
+        """Delete all stored vectors in the current collection."""
+        rows = self.collection.get(include=[])
+        ids = rows.get("ids", [])
+        if ids:
+            self.collection.delete(ids=ids)
+        LOGGER.info("Cleared collection=%s", self.collection_name)

@@ -6,6 +6,7 @@
 - Recursive chunking with language detection.
 - OpenAI embedding manager with retries + persistent cache.
 - Persistent ChromaDB vector store with stable chunk IDs.
+- Incremental (smart) indexing using file fingerprints (mtime/size/hash).
 - Hybrid retrieval ranking (semantic + lexical) + MMR diversification.
 - Strict and balanced answer modes with graceful fallback.
 - Structured logging and modular architecture.
@@ -20,15 +21,26 @@ export OPENAI_API_KEY=your_key
 ### Index documents
 
 ```python
-from rag_v2 import DocumentIngestionPipeline, EmbeddingManager, VectorStore
-from rag_v2.indexing import index_documents
+from pathlib import Path
 
-pipeline = DocumentIngestionPipeline()
-docs, report = pipeline.load_documents("data")
+from rag_v2 import DocumentIngestionPipeline, EmbeddingManager, VectorStore
+from rag_v2.smart_indexing import IndexStateStore, SmartIndexer
 
 emb = EmbeddingManager()
-store = VectorStore(reset=True)
-index_documents(docs, emb, store)
+store = VectorStore()
+state = IndexStateStore(Path("data/vector_store/index_state.json"))
+
+indexer = SmartIndexer(
+    data_dir=Path("data"),
+    ingestion_pipeline=DocumentIngestionPipeline(),
+    embedding_manager=emb,
+    vector_store=store,
+    state_store=state,
+    chunk_size=900,
+    chunk_overlap=140,
+)
+summary = indexer.run(force_reindex=False)
+print(summary)
 ```
 
 ### Ask questions
