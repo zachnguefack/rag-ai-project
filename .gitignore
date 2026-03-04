@@ -1,10 +1,33 @@
-# Python-generated files
+# --- Python ---
 __pycache__/
-*.py[oc]
+*.py[cod]
+*.pyd
+*.dll
+
+# --- Packaging / build ---
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
+.eggs/
 
-# Virtual environments
-.venv
+# --- Environments ---
+.venv/
+venv/
+env/
+
+# --- Secrets ---
+.env
+
+# --- Jupyter / caches / data ---
+.ipynb_checkpoints/
+notebook/data/
+data/
+vector_store/
+data/vector_store/
+*.jsonl
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+~$*.docx
