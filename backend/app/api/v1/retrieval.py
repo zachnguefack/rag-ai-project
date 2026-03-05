@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_current_user, get_document_repository, get_rag_service, get_rbac_service
+from app.api.deps import get_audit_service, get_current_user, get_document_repository, get_rag_service, get_rbac_service
 from app.database.repositories.document_repo import DocumentRepository
 from app.models.domain.user import User
 from app.models.schema.retrieval import RAGQueryRequest, RAGQueryResponse
 from app.security.policies import DOCUMENT_GLOBAL_ACCESS_ROLES, Permission
+from app.services.audit_service import AuditService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
 
@@ -51,6 +52,7 @@ def rag_query(
     rbac_service: RBACService = Depends(get_rbac_service),
     document_repository: DocumentRepository = Depends(get_document_repository),
     rag_service: RAGApplicationService = Depends(get_rag_service),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> RAGQueryResponse:
     rbac_service.enforce_permission(user, Permission.SEARCH_DOCUMENT)
     rbac_service.enforce_permission(user, Permission.READ_DOCUMENT)
@@ -66,6 +68,14 @@ def rag_query(
         mode=request.mode,
         strict_document_scope=request.strict_document_scope,
         metadata_filter=metadata_filter,
+    )
+
+    audit_service.record_query_event(
+        user_id=user.user_id,
+        question=request.question,
+        documents_retrieved=[str(citation) for citation in result.get("citations", [])],
+        answer_generated=result.get("answer", ""),
+        confidence_score=float(result.get("confidence", {}).get("score", 0.0)),
     )
 
     return RAGQueryResponse(
