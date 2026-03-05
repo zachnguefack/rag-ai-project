@@ -10,7 +10,7 @@ from rag_v2 import DEFAULT_CONFIG
 @dataclass(slots=True)
 class BackendSettings:
     app_name: str = "RAG v2 Backend"
-    app_version: str = "1.0.0"
+    app_version: str = "2.0.0"
     app_env: str = os.getenv("APP_ENV", "development")
 
     api_key: str | None = os.getenv("RAG_API_KEY")
@@ -18,6 +18,17 @@ class BackendSettings:
 
     jwt_secret_key: str = os.getenv("RAG_JWT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION")
     jwt_access_token_expire_minutes: int = int(os.getenv("RAG_JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
+    # SQL Server first. Works on Windows and Linux (ODBC Driver 18+).
+    database_url: str = os.getenv(
+        "RAG_DATABASE_URL",
+        "mssql+pyodbc://sa:YourStrong!Passw0rd@localhost:1433/rag_enterprise?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes",
+    )
+    database_echo: bool = os.getenv("RAG_DATABASE_ECHO", "false").lower() == "true"
+
+    deployment_target: str = os.getenv("RAG_DEPLOYMENT_TARGET", "linux").lower()  # linux|windows
+    service_host: str = os.getenv("RAG_SERVICE_HOST", "0.0.0.0")
+    service_port: int = int(os.getenv("RAG_SERVICE_PORT", "8000"))
 
     data_dir: Path = DEFAULT_CONFIG.data_dir
     vector_store_dir: Path = DEFAULT_CONFIG.vector_store_dir
