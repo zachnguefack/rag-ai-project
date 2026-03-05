@@ -3,13 +3,12 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from rag_v2 import EmbeddingManager, RAGRetriever, RAGService, SmartIndexer
+from rag_v2 import EmbeddingManager, RAGRetriever, RAGService, SmartIndexer, VectorStore
 from rag_v2.answer import AnswerPolicy
 from rag_v2.smart_indexing import IndexStateStore
 
 from app.config.settings import BackendSettings
 from app.rag_engine.ingestion.pipeline import build_ingestion_pipeline
-from app.rag_engine.vector_store.factory import build_vector_store
 
 
 class RAGApplicationService:
@@ -25,7 +24,7 @@ class RAGApplicationService:
             max_retries=settings.embedding_retry_max_attempts,
             base_wait_s=settings.embedding_retry_base_wait_s,
         )
-        self._vector_store = build_vector_store(
+        self._vector_store = VectorStore(
             collection_name=settings.collection_name,
             persist_directory=str(settings.vector_store_dir),
         )
