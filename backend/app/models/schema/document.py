@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class IndexRequest(BaseModel):
-    force_reindex: bool = False
+    force_reindex: bool = Field(default=False, description="Forces complete re-indexing instead of incremental indexing.")
 
 
 class IndexResponse(BaseModel):
@@ -20,22 +20,22 @@ class DocumentAccessResponse(BaseModel):
 
 
 class DocumentMetadataResponse(BaseModel):
-    department: str
-    owner: str
-    classification: str
-    permissions: list[str] = Field(default_factory=list)
+    department: str = Field(..., examples=["Finance"])
+    owner: str = Field(..., examples=["jane.doe"])
+    classification: str = Field(..., examples=["internal"])
+    permissions: list[str] = Field(default_factory=list, examples=[["read", "update"]])
 
 
 class DocumentCreateRequest(BaseModel):
-    document_id: str
-    title: str
-    content: str
+    document_id: str = Field(..., examples=["policy-2026-001"])
+    title: str = Field(..., examples=["Travel and Expense Policy"])
+    content: str = Field(..., examples=["Employees must submit expense reports within 30 days..."])
     metadata: DocumentMetadataResponse
 
 
 class DocumentUpdateRequest(BaseModel):
-    title: str
-    content: str
+    title: str = Field(..., examples=["Travel and Expense Policy (Revised)"])
+    content: str = Field(..., examples=["Updated policy content..."])
     metadata: DocumentMetadataResponse
 
 

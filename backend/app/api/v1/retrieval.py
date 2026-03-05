@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_audit_service, get_current_user, get_document_repository, get_rbac_service, get_retrieval_service
+from app.api.deps import get_audit_service, get_current_user, get_document_repository, get_rbac_service, get_retrieval_service, validate_api_key
 from app.database.repositories.document_repo import DocumentRepository
 from app.models.domain.user import User
+from app.models.schema.common import ErrorResponse
 from app.models.schema.retrieval import RAGQueryRequest, RAGQueryResponse
 from app.rag_engine.retrieval.filters import document_id_filter
 from app.security.policies import DOCUMENT_GLOBAL_ACCESS_ROLES, Permission
@@ -12,7 +13,7 @@ from app.services.audit_service import AuditService
 from app.services.rbac_service import RBACService
 from app.services.retrieval_service import RetrievalService
 
-router = APIRouter()
+router = APIRouter(tags=["RAG Query"])
 
 
 def _is_document_accessible(user: User, document_id: str, owner_user_id: str, allowed_users: set[str], allowed_roles: set[str]) -> bool:
@@ -42,7 +43,14 @@ def _build_accessible_document_ids(user: User, document_repository: DocumentRepo
     ]
 
 
-@router.post('/rag/query', response_model=RAGQueryResponse)
+@router.post(
+    '/rag/query',
+    response_model=RAGQueryResponse,
+    summary="Query enterprise knowledge base",
+    description="Answers a user question using ACL-aware retrieval and grounded generation.",
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key)],
+)
 def rag_query(
     request: RAGQueryRequest,
     user: User = Depends(get_current_user),

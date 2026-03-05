@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Security, status
 
 from app.config.settings import BackendSettings, load_settings
+from fastapi.security import APIKeyHeader
 from app.database.repositories.document_repo import DocumentRepository
 from app.database.repositories.ingest_job_repo import IngestJobRepository
 from app.models.domain.user import User
@@ -26,6 +27,9 @@ _runtime_audit_service: AuditService | None = None
 _runtime_retrieval_service: RetrievalService | None = None
 _runtime_ingestion_service: IngestionService | None = None
 _runtime_ingest_job_repo: IngestJobRepository | None = None
+
+
+api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 
 
 def get_settings() -> BackendSettings:
@@ -104,7 +108,7 @@ def get_auth_service(settings: BackendSettings = Depends(get_settings)) -> AuthS
     return _runtime_auth
 
 
-def validate_api_key(x_api_key: str | None = Header(default=None), settings: BackendSettings = Depends(get_settings)) -> None:
+def validate_api_key(x_api_key: str | None = Security(api_key_header), settings: BackendSettings = Depends(get_settings)) -> None:
     if settings.allow_unauthenticated:
         return
     if not settings.api_key:
