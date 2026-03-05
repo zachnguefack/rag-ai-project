@@ -69,6 +69,14 @@ class UserRepository:
     def get_by_email(self, email: str) -> UserRecord | None:
         return next((record for record in self._records.values() if str(record.email) == email), None)
 
+
+    def set_roles(self, user_id: str, roles: list[RoleName]) -> UserRecord | None:
+        record = self._records.get(user_id)
+        if record is None:
+            return None
+        record.roles = roles
+        return record
+
     def create(self, username: str, email: str, password_hash: str, roles: list[RoleName]) -> UserRecord:
         user_id = f"u-{secrets.token_hex(8)}"
         record = UserRecord(

@@ -7,7 +7,7 @@ from fastapi.security import APIKeyHeader
 from app.database.repositories.document_repo import DocumentRepository
 from app.database.repositories.ingest_job_repo import IngestJobRepository
 from app.models.domain.user import User
-from app.security.oauth2 import extract_bearer_token
+from app.security.oauth2 import bearer_scheme
 from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
 from app.services.document_service import DocumentService
@@ -30,6 +30,11 @@ _runtime_ingest_job_repo: IngestJobRepository | None = None
 
 
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
+x_user_id_header = APIKeyHeader(
+    name="X-User-Id",
+    auto_error=False,
+    description="Local/dev identity header consumed by RBAC resolution.",
+)
 
 
 def get_settings() -> BackendSettings:
@@ -119,15 +124,25 @@ def validate_api_key(x_api_key: str | None = Security(api_key_header), settings:
 
 def get_current_user(
     request: Request,
-    token: str | None = Depends(extract_bearer_token),
+    x_user_id: str | None = Security(x_user_id_header),
+    credentials=Security(bearer_scheme),
     auth_service: AuthService = Depends(get_auth_service),
+    rbac_service: RBACService = Depends(get_rbac_service),
 ) -> User:
     existing_user = getattr(request.state, "current_user", None)
     if existing_user is not None:
         return existing_user
 
-    if token is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token.")
-    user = auth_service.resolve_user_from_token(token)
+    if x_user_id:
+        user = rbac_service.resolve_user(x_user_id)
+        request.state.current_user = user
+        return user
+
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token or X-User-Id header.")
+    if credentials.scheme.lower() != "bearer" or not credentials.credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization scheme.")
+
+    user = auth_service.resolve_user_from_token(credentials.credentials)
     request.state.current_user = user
     return user

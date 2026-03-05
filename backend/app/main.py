@@ -15,6 +15,7 @@ OPENAPI_TAGS = [
     {"name": "Documents", "description": "Document CRUD, access checks, versioning, and indexing workflows."},
     {"name": "RAG Query", "description": "Question-answering and retrieval endpoints powered by the RAG engine."},
     {"name": "Admin", "description": "Administrative endpoints requiring elevated privileges."},
+    {"name": "Roles & Permissions", "description": "RBAC role, permission, and access validation management APIs."},
     {"name": "Audit", "description": "Audit trail endpoints for traceability and compliance."},
     {"name": "System", "description": "Operational and health endpoints for runtime monitoring."},
 ]
@@ -26,7 +27,9 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
         title=runtime_settings.app_name,
         description=(
             "Enterprise RAG backend API for secure authentication, document lifecycle management, "
-            "retrieval-augmented generation, and auditability."
+            "retrieval-augmented generation, and auditability.\n\n"
+            "Authentication options in Swagger: use `Authorization: Bearer <token>` or set `X-User-Id` "
+            "for local/dev identity simulation consumed by RBAC resolution."
         ),
         version=runtime_settings.app_version,
         contact={"name": "Backend Platform Team", "email": "backend-team@example.com"},
