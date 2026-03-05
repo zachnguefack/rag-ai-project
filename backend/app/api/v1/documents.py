@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_current_user, get_document_service, get_rag_service, get_rbac_service, validate_api_key
+from app.api.deps import get_current_user, get_document_service, get_ingestion_service, get_rbac_service, validate_api_key
 from app.models.domain.user import User
 from app.models.schema.document import (
     DocumentAccessResponse,
@@ -17,7 +17,7 @@ from app.models.schema.document import (
 from app.security.policies import Permission, RoleName
 from app.security.rbac import require_permissions, require_roles
 from app.services.document_service import DocumentService
-from app.services.rag_service import RAGApplicationService
+from app.services.ingestion_service import IngestionService
 from app.services.rbac_service import RBACService
 
 router = APIRouter()
@@ -31,8 +31,14 @@ router = APIRouter()
     RoleName.SUPER_ADMINISTRATOR,
 )
 @require_permissions(Permission.INGEST_DOCUMENT)
-def index_documents(request: IndexRequest, service: RAGApplicationService = Depends(get_rag_service)) -> IndexResponse:
-    return IndexResponse(**service.run_indexing(force_reindex=request.force_reindex))
+def index_documents(request: IndexRequest, service: IngestionService = Depends(get_ingestion_service)) -> IndexResponse:
+    job = service.run_incremental_indexing(force_reindex=request.force_reindex)
+    return IndexResponse(
+        indexed_files=job.indexed_files,
+        indexed_chunks=job.indexed_chunks,
+        removed_files=job.removed_files,
+        reused_existing_index=job.reused_existing_index,
+    )
 
 
 @router.get(

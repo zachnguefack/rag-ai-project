@@ -4,13 +4,16 @@ from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.config.settings import BackendSettings, load_settings
 from app.database.repositories.document_repo import DocumentRepository
+from app.database.repositories.ingest_job_repo import IngestJobRepository
 from app.models.domain.user import User
 from app.security.oauth2 import extract_bearer_token
 from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
 from app.services.document_service import DocumentService
+from app.services.ingestion_service import IngestionService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
+from app.services.retrieval_service import RetrievalService
 
 
 _runtime_settings: BackendSettings | None = None
@@ -20,6 +23,9 @@ _runtime_auth: AuthService | None = None
 _runtime_document_repo: DocumentRepository | None = None
 _runtime_document_service: DocumentService | None = None
 _runtime_audit_service: AuditService | None = None
+_runtime_retrieval_service: RetrievalService | None = None
+_runtime_ingestion_service: IngestionService | None = None
+_runtime_ingest_job_repo: IngestJobRepository | None = None
 
 
 def get_settings() -> BackendSettings:
@@ -36,11 +42,35 @@ def get_document_repository() -> DocumentRepository:
     return _runtime_document_repo
 
 
+def get_ingest_job_repository() -> IngestJobRepository:
+    global _runtime_ingest_job_repo
+    if _runtime_ingest_job_repo is None:
+        _runtime_ingest_job_repo = IngestJobRepository()
+    return _runtime_ingest_job_repo
+
+
 def get_rag_service(settings: BackendSettings = Depends(get_settings)) -> RAGApplicationService:
     global _runtime_service
     if _runtime_service is None:
         _runtime_service = RAGApplicationService(settings)
     return _runtime_service
+
+
+def get_retrieval_service(rag_service: RAGApplicationService = Depends(get_rag_service)) -> RetrievalService:
+    global _runtime_retrieval_service
+    if _runtime_retrieval_service is None:
+        _runtime_retrieval_service = RetrievalService(rag_service)
+    return _runtime_retrieval_service
+
+
+def get_ingestion_service(
+    rag_service: RAGApplicationService = Depends(get_rag_service),
+    ingest_job_repository: IngestJobRepository = Depends(get_ingest_job_repository),
+) -> IngestionService:
+    global _runtime_ingestion_service
+    if _runtime_ingestion_service is None:
+        _runtime_ingestion_service = IngestionService(rag_service=rag_service, ingest_job_repo=ingest_job_repository)
+    return _runtime_ingestion_service
 
 
 def get_rbac_service(document_repository: DocumentRepository = Depends(get_document_repository)) -> RBACService:
@@ -60,12 +90,12 @@ def get_document_service(
     return _runtime_document_service
 
 
-
 def get_audit_service() -> AuditService:
     global _runtime_audit_service
     if _runtime_audit_service is None:
         _runtime_audit_service = AuditService()
     return _runtime_audit_service
+
 
 def get_auth_service(settings: BackendSettings = Depends(get_settings)) -> AuthService:
     global _runtime_auth
@@ -78,10 +108,7 @@ def validate_api_key(x_api_key: str | None = Header(default=None), settings: Bac
     if settings.allow_unauthenticated:
         return
     if not settings.api_key:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server API key is not configured.",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server API key is not configured.")
     if x_api_key != settings.api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key.")
 

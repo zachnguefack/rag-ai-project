@@ -141,3 +141,5 @@ Document access control for retrieval:
 For a production-ready enterprise backend architecture (API, security, RBAC, document management, RAG engine, vector DB, audit logging, and configuration management), see:
 
 - `docs/enterprise_fastapi_backend_architecture.md`
+
+- `docs/backend_runtime_deployment.md`
