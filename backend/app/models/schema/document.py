@@ -12,3 +12,8 @@ class IndexResponse(BaseModel):
     indexed_chunks: int
     removed_files: int
     reused_existing_index: bool
+
+
+class DocumentAccessResponse(BaseModel):
+    document_id: str
+    message: str
