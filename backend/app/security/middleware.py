@@ -3,11 +3,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from app.security.policies import Permission, RoleName
+from app.services.auth_service import AuthService
 from app.services.rbac_service import RBACService
 
 
@@ -22,9 +23,10 @@ class RouteGuard:
 class RBACMiddleware(BaseHTTPMiddleware):
     """Enterprise-style deny-by-default RBAC gate for protected API routes."""
 
-    def __init__(self, app, rbac_service: RBACService):
+    def __init__(self, app, rbac_service: RBACService, auth_service: AuthService):
         super().__init__(app)
         self._rbac = rbac_service
+        self._auth = auth_service
         self._guards = (
             RouteGuard(
                 method="POST",
@@ -52,10 +54,14 @@ class RBACMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         try:
-            user_id = request.headers.get("x-user-id")
-            if not user_id:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing X-User-Id header.")
-            user = self._rbac.resolve_user(user_id)
+            authorization = request.headers.get("authorization")
+            if not authorization:
+                raise HTTPException(status_code=401, detail="Missing Authorization header.")
+            scheme, _, token = authorization.partition(" ")
+            if scheme.lower() != "bearer" or not token:
+                raise HTTPException(status_code=401, detail="Invalid authorization scheme.")
+
+            user = self._auth.resolve_user_from_token(token)
             request.state.current_user = user
 
             if guard.required_roles:

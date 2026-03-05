@@ -4,6 +4,8 @@ from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.config.settings import BackendSettings, load_settings
 from app.models.domain.user import User
+from app.security.oauth2 import extract_bearer_token
+from app.services.auth_service import AuthService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
 
@@ -11,6 +13,7 @@ from app.services.rbac_service import RBACService
 _runtime_settings: BackendSettings | None = None
 _runtime_service: RAGApplicationService | None = None
 _runtime_rbac: RBACService | None = None
+_runtime_auth: AuthService | None = None
 
 
 def get_settings() -> BackendSettings:
@@ -34,6 +37,13 @@ def get_rbac_service() -> RBACService:
     return _runtime_rbac
 
 
+def get_auth_service(settings: BackendSettings = Depends(get_settings)) -> AuthService:
+    global _runtime_auth
+    if _runtime_auth is None:
+        _runtime_auth = AuthService(settings=settings)
+    return _runtime_auth
+
+
 def validate_api_key(x_api_key: str | None = Header(default=None), settings: BackendSettings = Depends(get_settings)) -> None:
     if settings.allow_unauthenticated:
         return
@@ -48,14 +58,15 @@ def validate_api_key(x_api_key: str | None = Header(default=None), settings: Bac
 
 def get_current_user(
     request: Request,
-    x_user_id: str | None = Header(default=None),
-    rbac_service: RBACService = Depends(get_rbac_service),
+    token: str | None = Depends(extract_bearer_token),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> User:
     existing_user = getattr(request.state, "current_user", None)
     if existing_user is not None:
         return existing_user
-    if not x_user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing X-User-Id header.")
-    user = rbac_service.resolve_user(x_user_id)
+
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing access token.")
+    user = auth_service.resolve_user_from_token(token)
     request.state.current_user = user
     return user
