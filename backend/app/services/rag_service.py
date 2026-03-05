@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from typing import Any
 
 from rag_v2 import DocumentIngestionPipeline, EmbeddingManager, RAGRetriever, RAGService, SmartIndexer, VectorStore
 from rag_v2.answer import AnswerPolicy
@@ -51,7 +52,13 @@ class RAGApplicationService:
             "reused_existing_index": summary.reused_existing_index,
         }
 
-    def answer(self, question: str, mode: str, strict_document_scope: bool | None = None) -> dict:
+    def answer(
+        self,
+        question: str,
+        mode: str,
+        strict_document_scope: bool | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> dict:
         strict_scope = self._settings.strict_document_scope if strict_document_scope is None else strict_document_scope
 
         policy = AnswerPolicy(
@@ -64,6 +71,6 @@ class RAGApplicationService:
             min_confidence=self._settings.strict_min_confidence,
             strict_document_scope=strict_scope,
         )
-        response = self._rag_service.answer(question=question, policy=policy)
+        response = self._rag_service.answer(question=question, policy=policy, metadata_filter=metadata_filter)
         response["citations"] = [str(citation) for citation in response.get("citations", [])]
         return response
