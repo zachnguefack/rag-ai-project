@@ -112,24 +112,6 @@ python main.py \
 - Use `balanced` mode with `strict_document_scope=False` for assistant behavior with controlled fallback.
 - Keep chunk size/overlap and retrieval thresholds configurable based on benchmark data.
 
-
-## FastAPI backend
-
-A production-oriented backend is now available and wraps indexing + query operations in REST endpoints:
-
-```bash
-uvicorn rag_v2.backend:app --host 0.0.0.0 --port 8000
-```
-
-Available endpoints (prefix: `/api/v1`):
-- `GET /health`
-- `POST /index`
-- `POST /query`
-
-Authentication controls:
-- Set `RAG_ALLOW_UNAUTHENTICATED=false` to require API key auth.
-- Set `RAG_API_KEY=<your-secret>` and provide `x-api-key` header in protected calls.
-
 ## Enterprise FastAPI backend blueprint
 
 For a production-ready enterprise backend architecture (API, security, RBAC, document management, RAG engine, vector DB, audit logging, and configuration management), see:
