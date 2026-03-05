@@ -1,13 +1,24 @@
-langchain
-langchain-core
-langchain-community
-langchain-openai
-pypdf
-pymupdf
-sentence-transformers
-langchain-huggingface
-faiss-cpu
-chromadb
-python-dotenv
-fastapi
-uvicorn
+# API server
+fastapi>=0.117.1
+uvicorn>=0.36.0
+pydantic>=2.0.0
+email-validator>=2.0.0
+
+# Environment configuration
+python-dotenv>=1.2.1
+
+# RAG core and embeddings
+langchain-community>=0.4.1
+langchain-core>=1.2.16
+langchain-openai>=1.1.10
+langchain-text-splitters>=1.1.1
+chromadb>=1.5.2
+numpy>=2.0.0
+
+# Document processing
+pymupdf>=1.27.1
+pypdf>=6.7.4
+docx2txt>=0.8
+pandas>=2.0.0
+openpyxl>=3.1.0
+langdetect>=1.0.9
