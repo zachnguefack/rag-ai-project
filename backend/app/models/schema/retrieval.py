@@ -4,9 +4,13 @@ from pydantic import BaseModel, Field
 
 
 class RAGQueryRequest(BaseModel):
-    question: str = Field(..., min_length=2)
-    mode: str = Field(default="balanced", pattern="^(strict|balanced)$")
-    strict_document_scope: bool | None = None
+    question: str = Field(..., min_length=2, examples=["What is the reimbursement limit for meals?"])
+    mode: str = Field(default="balanced", pattern="^(strict|balanced)$", examples=["balanced"])
+    strict_document_scope: bool | None = Field(
+        default=None,
+        description="When true, only returns answers if sufficient document evidence is found.",
+        examples=[True],
+    )
 
 
 class RAGQueryResponse(BaseModel):

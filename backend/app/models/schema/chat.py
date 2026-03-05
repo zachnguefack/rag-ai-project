@@ -4,9 +4,9 @@ from pydantic import BaseModel, Field
 
 
 class QueryRequest(BaseModel):
-    question: str = Field(..., min_length=2)
-    mode: str = Field(default="balanced", pattern="^(strict|balanced)$")
-    strict_document_scope: bool | None = None
+    question: str = Field(..., min_length=2, examples=["Summarize the leave policy."])
+    mode: str = Field(default="balanced", pattern="^(strict|balanced)$", examples=["strict"])
+    strict_document_scope: bool | None = Field(default=None, examples=[False])
 
 
 class QueryResponse(BaseModel):

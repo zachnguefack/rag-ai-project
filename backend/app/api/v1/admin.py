@@ -7,20 +7,28 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.api.deps import get_audit_service, get_current_user, get_rbac_service, validate_api_key
 from app.models.domain.user import User
 from app.models.schema.audit import AuditLogListResponse, AuditLogResponse
+from app.models.schema.common import ErrorResponse
 from app.security.policies import Permission
 from app.services.audit_service import AuditService
 from app.services.rbac_service import RBACService
 
-router = APIRouter()
+router = APIRouter(tags=["Admin", "Audit"])
 
 
-@router.get('/admin/audit-logs', response_model=AuditLogListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)])
+@router.get(
+    '/admin/audit-logs',
+    response_model=AuditLogListResponse,
+    summary="List audit logs",
+    description="Returns paginated audit query events with optional time/user filters.",
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+)
 def list_audit_logs(
-    user_id: str | None = Query(default=None),
-    start_time: datetime | None = Query(default=None),
-    end_time: datetime | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+    user_id: str | None = Query(default=None, description="Filter logs by user ID."),
+    start_time: datetime | None = Query(default=None, description="Include logs from this timestamp."),
+    end_time: datetime | None = Query(default=None, description="Include logs up to this timestamp."),
+    limit: int = Query(default=100, ge=1, le=500, description="Maximum number of records to return."),
+    offset: int = Query(default=0, ge=0, description="Offset for pagination."),
     current_user: User = Depends(get_current_user),
     rbac_service: RBACService = Depends(get_rbac_service),
     audit_service: AuditService = Depends(get_audit_service),
@@ -48,7 +56,14 @@ def list_audit_logs(
     return AuditLogListResponse(items=payload, count=len(payload))
 
 
-@router.get('/admin/audit-logs/{event_id}', response_model=AuditLogResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)])
+@router.get(
+    '/admin/audit-logs/{event_id}',
+    response_model=AuditLogResponse,
+    summary="Get audit log by ID",
+    description="Returns details for a single audit event.",
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+)
 def get_audit_log(
     event_id: str,
     current_user: User = Depends(get_current_user),

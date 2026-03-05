@@ -4,13 +4,21 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_audit_service, get_rag_service, validate_api_key
 from app.models.schema.chat import QueryRequest, QueryResponse
+from app.models.schema.common import ErrorResponse
 from app.services.audit_service import AuditService
 from app.services.rag_service import RAGApplicationService
 
-router = APIRouter()
+router = APIRouter(tags=["RAG Query"])
 
 
-@router.post('/chat/ask', response_model=QueryResponse, dependencies=[Depends(validate_api_key)])
+@router.post(
+    '/chat/ask',
+    response_model=QueryResponse,
+    summary="Ask a RAG question (legacy)",
+    description="Runs a question through the RAG service and returns the full response envelope.",
+    responses={401: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key)],
+)
 def ask_question(
     request: QueryRequest,
     service: RAGApplicationService = Depends(get_rag_service),
