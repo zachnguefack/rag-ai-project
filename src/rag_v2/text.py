@@ -5,9 +5,15 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langdetect import DetectorFactory, detect
 
-DetectorFactory.seed = 42
+try:
+    from langdetect import DetectorFactory, detect
+except ModuleNotFoundError:  # pragma: no cover - optional dependency fallback
+    DetectorFactory = None
+    detect = None
+
+if DetectorFactory is not None:
+    DetectorFactory.seed = 42
 SUPPORTED_LANGS = {"fr", "en", "it"}
 
 
@@ -21,6 +27,9 @@ def clean_text(text: str) -> str:
 
 
 def detect_language_safe(text: str) -> str:
+    if detect is None:
+        return "unknown"
+
     compact = re.sub(r"\s+", " ", text or "").strip()
     if len(compact) < 40:
         return "unknown"
