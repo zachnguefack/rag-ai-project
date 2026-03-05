@@ -129,6 +129,12 @@ Available endpoints (prefix: `/api/v1`):
 Authentication controls:
 - Set `RAG_ALLOW_UNAUTHENTICATED=false` to require API key auth.
 - Set `RAG_API_KEY=<your-secret>` and provide `x-api-key` header in protected calls.
+- `POST /query` also requires `X-User-Id` and optional `X-User-Role` headers.
+
+Document access control for retrieval:
+- The query lifecycle is now: **authenticate request -> validate user role -> build document access filter -> vector retrieval -> answer generation**.
+- Define ACL rules in `RAG_ACCESS_POLICY_PATH` (defaults to `data/access_policy.json`).
+- ACL entries are applied as metadata filters before vector search so users only retrieve allowed documents.
 
 ## Enterprise FastAPI backend blueprint
 

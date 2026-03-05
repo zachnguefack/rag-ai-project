@@ -42,6 +42,8 @@ class BackendSettings:
     strict_min_confidence: float = DEFAULT_CONFIG.strict_min_confidence
     strict_document_scope: bool = DEFAULT_CONFIG.strict_document_scope
 
+    access_policy_path: Path = Path(os.getenv("RAG_ACCESS_POLICY_PATH", str(DEFAULT_CONFIG.data_dir / "access_policy.json")))
+
 
 def load_settings() -> BackendSettings:
     """Load backend settings from environment and defaults."""

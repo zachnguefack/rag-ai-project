@@ -1,0 +1,14 @@
+{
+  "default_visibility": "private",
+  "documents": {
+    "hr/benefits-guide.pdf": {
+      "owner_id": "user-123",
+      "allowed_roles": ["power_user", "document_administrator"],
+      "allowed_users": ["user-456"],
+      "public": false
+    },
+    "handbook/company-overview.txt": {
+      "public": true
+    }
+  }
+}
