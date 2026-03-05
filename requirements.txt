@@ -9,5 +9,3 @@ langchain-huggingface
 faiss-cpu
 chromadb
 python-dotenv
-fastapi
-uvicorn
