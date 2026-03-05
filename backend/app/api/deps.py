@@ -7,6 +7,7 @@ from app.database.repositories.document_repo import DocumentRepository
 from app.models.domain.user import User
 from app.security.oauth2 import extract_bearer_token
 from app.services.auth_service import AuthService
+from app.services.audit_service import AuditService
 from app.services.document_service import DocumentService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
@@ -18,6 +19,7 @@ _runtime_rbac: RBACService | None = None
 _runtime_auth: AuthService | None = None
 _runtime_document_repo: DocumentRepository | None = None
 _runtime_document_service: DocumentService | None = None
+_runtime_audit_service: AuditService | None = None
 
 
 def get_settings() -> BackendSettings:
@@ -57,6 +59,13 @@ def get_document_service(
         _runtime_document_service = DocumentService(document_repository=document_repository, rbac_service=rbac_service)
     return _runtime_document_service
 
+
+
+def get_audit_service() -> AuditService:
+    global _runtime_audit_service
+    if _runtime_audit_service is None:
+        _runtime_audit_service = AuditService()
+    return _runtime_audit_service
 
 def get_auth_service(settings: BackendSettings = Depends(get_settings)) -> AuthService:
     global _runtime_auth

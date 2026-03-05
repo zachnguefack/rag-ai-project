@@ -62,6 +62,8 @@ ROLE_PERMISSION_MAP: dict[RoleName, frozenset[Permission]] = {
             Permission.MANAGE_USERS,
             Permission.MANAGE_ROLES,
             Permission.MANAGE_SYSTEM,
+            Permission.READ_AUDIT_LOG,
+            Permission.EXPORT_AUDIT_LOG,
         }
     ),
     RoleName.SUPER_ADMINISTRATOR: frozenset(permission for permission in Permission),
