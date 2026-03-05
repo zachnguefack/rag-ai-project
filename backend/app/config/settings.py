@@ -16,6 +16,9 @@ class BackendSettings:
     api_key: str | None = os.getenv("RAG_API_KEY")
     allow_unauthenticated: bool = os.getenv("RAG_ALLOW_UNAUTHENTICATED", "true").lower() == "true"
 
+    jwt_secret_key: str = os.getenv("RAG_JWT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION")
+    jwt_access_token_expire_minutes: int = int(os.getenv("RAG_JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
     data_dir: Path = DEFAULT_CONFIG.data_dir
     vector_store_dir: Path = DEFAULT_CONFIG.vector_store_dir
     embedding_cache_path: Path = DEFAULT_CONFIG.embedding_cache_path
