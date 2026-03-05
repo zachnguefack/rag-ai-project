@@ -6,6 +6,7 @@ from rag_v2 import DocumentIngestionPipeline, EmbeddingManager, RAGRetriever, RA
 from rag_v2.answer import AnswerPolicy
 from rag_v2.smart_indexing import IndexStateStore
 
+from .access_control import DocumentAccessControlService, UserContext
 from .settings import BackendSettings
 
 
@@ -39,6 +40,12 @@ class RAGApplicationService:
             chunk_overlap=settings.chunk_overlap,
         )
 
+
+        self._access_control = DocumentAccessControlService(
+            policy_path=settings.access_policy_path,
+            data_dir=settings.data_dir,
+        )
+
         retriever = RAGRetriever(vector_store=self._vector_store, embedding_manager=self._embedding_manager)
         self._rag_service = RAGService(retriever=retriever, model=settings.chat_model)
 
@@ -53,7 +60,13 @@ class RAGApplicationService:
             "reused_existing_index": summary.reused_existing_index,
         }
 
-    def answer(self, question: str, mode: str, strict_document_scope: bool | None = None) -> dict:
+    def answer(
+        self,
+        question: str,
+        mode: str,
+        user: UserContext,
+        strict_document_scope: bool | None = None,
+    ) -> dict:
         strict_scope = self._settings.strict_document_scope if strict_document_scope is None else strict_document_scope
 
         policy = AnswerPolicy(
@@ -66,6 +79,7 @@ class RAGApplicationService:
             min_confidence=self._settings.strict_min_confidence,
             strict_document_scope=strict_scope,
         )
-        response = self._rag_service.answer(question=question, policy=policy)
+        access_filter = self._access_control.build_access_filter(user=user)
+        response = self._rag_service.answer(question=question, policy=policy, metadata_filter=access_filter)
         response["citations"] = [str(citation) for citation in response.get("citations", [])]
         return response
