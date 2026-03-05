@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IndexRequest(BaseModel):
@@ -17,3 +17,42 @@ class IndexResponse(BaseModel):
 class DocumentAccessResponse(BaseModel):
     document_id: str
     message: str
+
+
+class DocumentMetadataResponse(BaseModel):
+    department: str
+    owner: str
+    classification: str
+    permissions: list[str] = Field(default_factory=list)
+
+
+class DocumentCreateRequest(BaseModel):
+    document_id: str
+    title: str
+    content: str
+    metadata: DocumentMetadataResponse
+
+
+class DocumentUpdateRequest(BaseModel):
+    title: str
+    content: str
+    metadata: DocumentMetadataResponse
+
+
+class DocumentResponse(BaseModel):
+    document_id: str
+    title: str
+    current_version: int
+    content: str
+    metadata: DocumentMetadataResponse
+
+
+class DocumentVersionResponse(BaseModel):
+    version: int
+    content: str
+    metadata: DocumentMetadataResponse
+
+
+class DocumentDeleteResponse(BaseModel):
+    document_id: str
+    deleted: bool
