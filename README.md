@@ -143,3 +143,14 @@ For a production-ready enterprise backend architecture (API, security, RBAC, doc
 - `docs/enterprise_fastapi_backend_architecture.md`
 
 - `docs/backend_runtime_deployment.md`
+
+
+## Backend RBAC administration in Swagger
+
+The FastAPI backend exposes admin RBAC APIs under `/api/v1/admin` in the **Roles & Permissions** Swagger tag.
+
+- Source of truth for role-permission mapping: `backend/app/security/policies.py`.
+- Validation flow: identity (`X-User-Id` or Bearer token) -> decorators/permission checks -> optional document-level deny-by-default checks.
+- Use `/api/v1/admin/rbac/matrix` to inspect the full RBAC matrix and `/api/v1/admin/rbac/validate` to test user permission outcomes.
+
+Detailed usage and examples are documented in `docs/rbac_backend.md`.

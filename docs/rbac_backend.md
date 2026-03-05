@@ -15,28 +15,80 @@ The source of truth for this matrix is `app/security/policies.py`.
 
 ## Validation flow
 
-1. `RBACMiddleware` reads `X-User-Id` and resolves the user from `RBACService`.
-2. Route decorators (`@require_roles`, `@require_permissions`) attach required claims to endpoints.
-3. Middleware enforces role and permission checks before the endpoint executes.
-4. Document-level checks are executed via `RBACService.enforce_document_access`.
+1. `RBACMiddleware` resolves identity from `X-User-Id` (local/dev) or `Authorization: Bearer <token>`.
+2. Route decorators (`@require_roles`, `@require_permissions`) define RBAC claims on endpoints.
+3. Middleware and endpoint-level RBAC enforcement verify required permissions.
+4. Document-level checks are executed via `RBACService.enforce_document_access` (deny-by-default).
 
-## Code example
+## Swagger usage (`/docs`)
 
-```python
-@router.get('/documents/{document_id}/access')
-@require_permissions(Permission.READ_DOCUMENT)
-def verify_document_access(
-    document_id: str,
-    current_user: User = Depends(get_current_user),
-    rbac_service: RBACService = Depends(get_rbac_service),
-) -> DocumentAccessResponse:
-    rbac_service.enforce_document_access(current_user, document_id)
-    return DocumentAccessResponse(document_id=document_id, message="Access granted")
+Swagger supports all configured security schemes:
+
+- `x-api-key` for backend API key enforcement.
+- `Authorization: Bearer <token>` for JWT-authenticated users.
+- `X-User-Id` for local/dev identity simulation when testing RBAC flows.
+
+### Local/dev quick start in Swagger
+
+1. Open `/docs`.
+2. Expand **Authorize** and provide `x-api-key` if required by environment.
+3. For RBAC testing, set `X-User-Id` (e.g., `u-sys-admin`) to resolve a known user.
+4. Call endpoints in the **Roles & Permissions** section.
+
+## Admin RBAC endpoints
+
+All endpoints below are under `/api/v1/admin`, tagged as **Roles & Permissions**, and require `manage:roles`.
+
+- `GET /roles` — list all roles and permissions.
+- `GET /roles/{role}` — get one role with permissions.
+- `GET /permissions` — list all permissions.
+- `GET /users/{user_id}/roles` — list user role assignments.
+- `PUT /users/{user_id}/roles` — replace a user's full role set.
+- `PUT /roles/{role}/permissions` — returns `400` because policy is immutable in API.
+- `GET /rbac/matrix` — returns role→permission matrix from `policies.py`.
+- `POST /rbac/validate` — validate permission + optional document-level access for a user.
+
+### Example: replace user roles
+
+`PUT /api/v1/admin/users/u-standard/roles`
+
+```json
+{
+  "roles": ["standard_user", "power_user"]
+}
 ```
 
-`enforce_document_access` uses a deny-by-default model and grants access only when one of these is true:
-- user has a global-access role,
-- user is document owner,
-- user is explicitly allowed by user ID,
-- user is explicitly allowed through a role,
-- document is present in the user's allow list.
+Response:
+
+```json
+{
+  "user_id": "u-standard",
+  "roles": ["power_user", "standard_user"]
+}
+```
+
+### Example: validate access with optional document checks
+
+`POST /api/v1/admin/rbac/validate`
+
+```json
+{
+  "user_id": "u-power",
+  "permission": "read:document",
+  "document_id": "doc-public"
+}
+```
+
+Response:
+
+```json
+{
+  "user_id": "u-power",
+  "permission": "read:document",
+  "document_id": "doc-public",
+  "allowed": true,
+  "reason": "role=power_user"
+}
+```
+
+If `document_id` is provided, validation uses `RBACService.enforce_document_access` and remains deny-by-default.
