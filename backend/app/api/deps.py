@@ -3,9 +3,11 @@ from __future__ import annotations
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.config.settings import BackendSettings, load_settings
+from app.database.repositories.document_repo import DocumentRepository
 from app.models.domain.user import User
 from app.security.oauth2 import extract_bearer_token
 from app.services.auth_service import AuthService
+from app.services.document_service import DocumentService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
 
@@ -14,6 +16,8 @@ _runtime_settings: BackendSettings | None = None
 _runtime_service: RAGApplicationService | None = None
 _runtime_rbac: RBACService | None = None
 _runtime_auth: AuthService | None = None
+_runtime_document_repo: DocumentRepository | None = None
+_runtime_document_service: DocumentService | None = None
 
 
 def get_settings() -> BackendSettings:
@@ -23,6 +27,13 @@ def get_settings() -> BackendSettings:
     return _runtime_settings
 
 
+def get_document_repository() -> DocumentRepository:
+    global _runtime_document_repo
+    if _runtime_document_repo is None:
+        _runtime_document_repo = DocumentRepository()
+    return _runtime_document_repo
+
+
 def get_rag_service(settings: BackendSettings = Depends(get_settings)) -> RAGApplicationService:
     global _runtime_service
     if _runtime_service is None:
@@ -30,11 +41,21 @@ def get_rag_service(settings: BackendSettings = Depends(get_settings)) -> RAGApp
     return _runtime_service
 
 
-def get_rbac_service() -> RBACService:
+def get_rbac_service(document_repository: DocumentRepository = Depends(get_document_repository)) -> RBACService:
     global _runtime_rbac
     if _runtime_rbac is None:
-        _runtime_rbac = RBACService()
+        _runtime_rbac = RBACService(document_repository=document_repository)
     return _runtime_rbac
+
+
+def get_document_service(
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    rbac_service: RBACService = Depends(get_rbac_service),
+) -> DocumentService:
+    global _runtime_document_service
+    if _runtime_document_service is None:
+        _runtime_document_service = DocumentService(document_repository=document_repository, rbac_service=rbac_service)
+    return _runtime_document_service
 
 
 def get_auth_service(settings: BackendSettings = Depends(get_settings)) -> AuthService:
