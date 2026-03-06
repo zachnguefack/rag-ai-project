@@ -32,8 +32,23 @@ Swagger supports all configured security schemes:
 
 1. Open `/docs`.
 2. Expand **Authorize** and provide `x-api-key` if required by environment.
-3. For RBAC testing, set `X-User-Id` (e.g., `u-sys-admin`) to resolve a known user.
+3. Authenticate with `POST /api/v1/auth/login` using one of the development RBAC test accounts below and paste the JWT as `Bearer <token>`.
 4. Call endpoints in the **Roles & Permissions** section.
+
+## Development RBAC test accounts
+
+When `APP_ENV=development` or `RAG_DEV_BOOTSTRAP_USERS=true`, the backend seeds default RBAC users on startup **only if no users already exist**. This bootstrap is skipped in production-oriented environments by default.
+
+| Username   | Email                 | Password         | Role                   |
+| ---------- | --------------------- | ---------------- | ---------------------- |
+| admin      | admin@local.dev       | Admin123!        | Super Administrator    |
+| sysadmin   | sysadmin@local.dev    | Admin123!        | System Administrator   |
+| docadmin   | docadmin@local.dev    | Admin123!        | Document Administrator |
+| poweruser  | poweruser@local.dev   | Admin123!        | Power User             |
+| compliance | compliance@local.dev  | Compliance123!   | Compliance Officer     |
+| user       | user@local.dev        | User123!         | Standard User          |
+
+These accounts are intended for local development and Swagger RBAC testing only. Passwords are hashed before persistence by the backend security layer.
 
 ## Admin RBAC endpoints
 
