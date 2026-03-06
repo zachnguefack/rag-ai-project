@@ -13,3 +13,6 @@ class UserRecord(BaseModel):
     is_active: bool = True
     roles: list[RoleName] = Field(default_factory=list)
     document_allow_list: list[str] = Field(default_factory=list)
+    department: str = "general"
+    classification_level: str = "internal"
+    allowed_document_scopes: list[str] = Field(default_factory=list)

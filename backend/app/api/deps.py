@@ -12,9 +12,11 @@ from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
 from app.services.document_service import DocumentService
 from app.services.ingestion_service import IngestionService
+from app.services.document_access_service import DocumentAccessService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
 from app.services.retrieval_service import RetrievalService
+from app.services.scope_builder_service import ScopeBuilderService
 
 
 _runtime_settings: BackendSettings | None = None
@@ -27,6 +29,8 @@ _runtime_audit_service: AuditService | None = None
 _runtime_retrieval_service: RetrievalService | None = None
 _runtime_ingestion_service: IngestionService | None = None
 _runtime_ingest_job_repo: IngestJobRepository | None = None
+_runtime_document_access_service: DocumentAccessService | None = None
+_runtime_scope_builder_service: ScopeBuilderService | None = None
 
 
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
@@ -58,17 +62,42 @@ def get_ingest_job_repository() -> IngestJobRepository:
     return _runtime_ingest_job_repo
 
 
-def get_rag_service(settings: BackendSettings = Depends(get_settings)) -> RAGApplicationService:
+
+
+def get_document_access_service(
+    document_repository: DocumentRepository = Depends(get_document_repository),
+) -> DocumentAccessService:
+    global _runtime_document_access_service
+    if _runtime_document_access_service is None:
+        _runtime_document_access_service = DocumentAccessService(document_repository=document_repository)
+    return _runtime_document_access_service
+
+
+def get_scope_builder_service(
+    document_access_service: DocumentAccessService = Depends(get_document_access_service),
+) -> ScopeBuilderService:
+    global _runtime_scope_builder_service
+    if _runtime_scope_builder_service is None:
+        _runtime_scope_builder_service = ScopeBuilderService(document_access_service=document_access_service)
+    return _runtime_scope_builder_service
+
+def get_rag_service(
+    settings: BackendSettings = Depends(get_settings),
+    scope_builder: ScopeBuilderService = Depends(get_scope_builder_service),
+) -> RAGApplicationService:
     global _runtime_service
     if _runtime_service is None:
-        _runtime_service = RAGApplicationService(settings)
+        _runtime_service = RAGApplicationService(settings, scope_builder=scope_builder)
     return _runtime_service
 
 
-def get_retrieval_service(rag_service: RAGApplicationService = Depends(get_rag_service)) -> RetrievalService:
+def get_retrieval_service(
+    rag_service: RAGApplicationService = Depends(get_rag_service),
+    scope_builder: ScopeBuilderService = Depends(get_scope_builder_service),
+) -> RetrievalService:
     global _runtime_retrieval_service
     if _runtime_retrieval_service is None:
-        _runtime_retrieval_service = RetrievalService(rag_service)
+        _runtime_retrieval_service = RetrievalService(rag_service, scope_builder=scope_builder)
     return _runtime_retrieval_service
 
 

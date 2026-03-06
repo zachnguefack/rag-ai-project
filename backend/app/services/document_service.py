@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
 
 from app.database.repositories.document_repo import DocumentRepository
@@ -31,12 +34,29 @@ class DocumentService:
         record = DocumentRecord(
             document_id=request.document_id,
             title=request.title,
+            document_type=request.document_type,
             owner_user_id=request.metadata.owner,
             classification=request.metadata.classification,
+            status=request.metadata.status,
             department=request.metadata.department,
             allowed_roles=self._extract_roles(request.metadata.permissions),
             allowed_users=self._extract_users(request.metadata.permissions),
-            versions=[DocumentVersionRecord(version=1, content=request.content, metadata=metadata)],
+            allowed_departments=request.metadata.allowed_departments,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            versions=[
+                DocumentVersionRecord(
+                    version_id=f"{request.document_id}-v1",
+                    document_id=request.document_id,
+                    version_number=1,
+                    content=request.content,
+                    storage_path=f"/documents/{request.document_id}/v1",
+                    checksum=self._checksum(request.content),
+                    indexed=request.metadata.status in {"approved", "indexed"},
+                    approved_at=datetime.now(timezone.utc),
+                    metadata=metadata,
+                )
+            ],
         )
         self._documents.upsert(record)
         return self._to_document_response(record)
@@ -51,12 +71,28 @@ class DocumentService:
         metadata = self._metadata_from_request(request.metadata)
         next_version = record.current_version + 1
         record.title = request.title
+        record.document_type = request.document_type
         record.classification = request.metadata.classification
         record.department = request.metadata.department
+        record.status = request.metadata.status
         record.owner_user_id = request.metadata.owner
         record.allowed_roles = self._extract_roles(request.metadata.permissions)
         record.allowed_users = self._extract_users(request.metadata.permissions)
-        record.versions.append(DocumentVersionRecord(version=next_version, content=request.content, metadata=metadata))
+        record.allowed_departments = request.metadata.allowed_departments
+        record.updated_at = datetime.now(timezone.utc)
+        record.versions.append(
+            DocumentVersionRecord(
+                version_id=f"{document_id}-v{next_version}",
+                document_id=document_id,
+                version_number=next_version,
+                content=request.content,
+                storage_path=f"/documents/{document_id}/v{next_version}",
+                checksum=self._checksum(request.content),
+                indexed=request.metadata.status in {"approved", "indexed"},
+                approved_at=datetime.now(timezone.utc),
+                metadata=metadata,
+            )
+        )
         self._documents.upsert(record)
         return self._to_document_response(record)
 
@@ -83,9 +119,29 @@ class DocumentService:
         if record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document does not exist.")
         return [
-            DocumentVersionResponse(version=v.version, content=v.content, metadata=self._to_metadata_response(v.metadata))
+            DocumentVersionResponse(
+                version_id=v.version_id,
+                document_id=v.document_id,
+                version_number=v.version_number,
+                storage_path=v.storage_path,
+                checksum=v.checksum,
+                indexed=v.indexed,
+                approved_at=v.approved_at,
+                content=v.content,
+                metadata=self._to_metadata_response(v.metadata),
+            )
             for v in record.versions
         ]
+
+    def list_documents(self, user: User) -> list[DocumentResponse]:
+        docs: list[DocumentResponse] = []
+        for record in self._documents.list():
+            try:
+                self._rbac.enforce_document_access(user, record.document_id)
+            except HTTPException:
+                continue
+            docs.append(self._to_document_response(record))
+        return docs
 
     def _ensure_mutation_access(self, user: User, document: DocumentRecord) -> None:
         if user.role_names & DOCUMENT_GLOBAL_ACCESS_ROLES:
@@ -102,13 +158,16 @@ class DocumentService:
     def _extract_users(permissions: list[str]) -> list[str]:
         return [p.split(":", 1)[1] for p in permissions if p.startswith("user:")]
 
-    @staticmethod
-    def _metadata_from_request(metadata: DocumentMetadataResponse) -> DocumentMetadata:
+    def _metadata_from_request(self, metadata: DocumentMetadataResponse) -> DocumentMetadata:
         return DocumentMetadata(
             department=metadata.department,
             owner=metadata.owner,
             classification=metadata.classification,
+            status=metadata.status,
             permissions=metadata.permissions,
+            allowed_roles=self._extract_roles(metadata.permissions),
+            allowed_user_ids=self._extract_users(metadata.permissions),
+            allowed_departments=metadata.allowed_departments,
         )
 
     def _to_document_response(self, record: DocumentRecord) -> DocumentResponse:
@@ -116,8 +175,12 @@ class DocumentService:
         return DocumentResponse(
             document_id=record.document_id,
             title=record.title,
+            document_type=record.document_type,
+            status=record.status,
             current_version=record.current_version,
             content=latest.content,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
             metadata=self._to_metadata_response(latest.metadata),
         )
 
@@ -127,5 +190,11 @@ class DocumentService:
             department=metadata.department,
             owner=metadata.owner,
             classification=metadata.classification,
+            status=metadata.status,
             permissions=metadata.permissions,
+            allowed_departments=metadata.allowed_departments,
         )
+
+    @staticmethod
+    def _checksum(content: str) -> str:
+        return "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
