@@ -12,7 +12,6 @@ from app.services.auth_service import AuthService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
 
-
 logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
@@ -35,7 +34,11 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
             "Enterprise RAG backend API for secure authentication, document lifecycle management, "
             "retrieval-augmented generation, and auditability.\n\n"
             "Authentication options in Swagger: use `Authorization: Bearer <token>` or set `X-User-Id` "
-            "for local/dev identity simulation consumed by RBAC resolution."
+            "for local/dev identity simulation consumed by RBAC resolution.\n\n"
+            "Access model: each user has one primary department and each document belongs to one primary "
+            "department. Effective retrieval scope is computed before retrieval as: department documents + "
+            "explicit user document grants - revoked grants. `document_id` is an internal identifier, not "
+            "a filesystem path."
         ),
         version=runtime_settings.app_version,
         contact={"name": "Backend Platform Team", "email": "backend-team@example.com"},

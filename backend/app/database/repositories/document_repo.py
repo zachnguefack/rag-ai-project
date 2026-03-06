@@ -1,87 +1,82 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from app.models.persistence.document import DocumentMetadata, DocumentRecord, DocumentVersionRecord
 
 
 class DocumentRepository:
     def __init__(self) -> None:
+        now = datetime.now(timezone.utc)
         self._documents: dict[str, DocumentRecord] = {
-            "doc-public": DocumentRecord(
-                document_id="doc-public",
-                title="Public Knowledge Base",
-                owner_user_id="u-doc-admin",
-                department="knowledge",
+            "doc-ops": DocumentRecord(
+                document_id="doc-ops",
+                title="Operations Handbook",
+                department_id="dept-operations",
+                document_type="handbook",
+                owner="u-standard",
+                classification="internal",
+                status="active",
+                created_at=now,
+                updated_at=now,
                 versions=[
                     DocumentVersionRecord(
                         version=1,
-                        content="Public KB baseline content",
+                        content="Standard operations handbook",
                         metadata=DocumentMetadata(
-                            department="knowledge",
-                            owner="u-doc-admin",
-                            classification="internal",
-                            permissions=["role:standard_user"],
-                        ),
-                    )
-                ],
-            ),
-            "doc-standard": DocumentRecord(
-                document_id="doc-standard",
-                title="Standard User Handbook",
-                owner_user_id="u-standard",
-                allowed_users=["u-standard"],
-                department="operations",
-                versions=[
-                    DocumentVersionRecord(
-                        version=1,
-                        content="Standard handbook",
-                        metadata=DocumentMetadata(
-                            department="operations",
+                            department_id="dept-operations",
                             owner="u-standard",
                             classification="internal",
-                            permissions=["user:u-standard"],
+                            document_type="handbook",
+                            status="active",
                         ),
                     )
                 ],
             ),
-            "doc-power": DocumentRecord(
-                document_id="doc-power",
-                title="Power User SOP",
-                owner_user_id="u-power",
-                allowed_roles=["power_user"],
-                department="engineering",
+            "doc-eng": DocumentRecord(
+                document_id="doc-eng",
+                title="Engineering SOP",
+                department_id="dept-engineering",
+                document_type="sop",
+                owner="u-power",
+                classification="internal",
+                status="active",
+                created_at=now,
+                updated_at=now,
                 versions=[
                     DocumentVersionRecord(
                         version=1,
-                        content="Power user SOP",
+                        content="Engineering SOP",
                         metadata=DocumentMetadata(
-                            department="engineering",
+                            department_id="dept-engineering",
                             owner="u-power",
                             classification="internal",
-                            permissions=["role:power_user"],
+                            document_type="sop",
+                            status="active",
                         ),
                     )
                 ],
             ),
-            "doc-confidential": DocumentRecord(
-                document_id="doc-confidential",
+            "doc-compliance": DocumentRecord(
+                document_id="doc-compliance",
                 title="Compliance Incident Report",
-                owner_user_id="u-compliance",
+                department_id="dept-compliance",
+                document_type="report",
+                owner="u-compliance",
                 classification="confidential",
-                department="compliance",
-                allowed_roles=["compliance_officer", "system_administrator", "super_administrator"],
+                status="active",
+                created_at=now,
+                updated_at=now,
                 versions=[
                     DocumentVersionRecord(
                         version=1,
                         content="Confidential compliance report",
                         metadata=DocumentMetadata(
-                            department="compliance",
+                            department_id="dept-compliance",
                             owner="u-compliance",
                             classification="confidential",
-                            permissions=[
-                                "role:compliance_officer",
-                                "role:system_administrator",
-                                "role:super_administrator",
-                            ],
+                            document_type="report",
+                            status="active",
                         ),
                     )
                 ],
@@ -93,6 +88,9 @@ class DocumentRepository:
 
     def list(self) -> list[DocumentRecord]:
         return list(self._documents.values())
+
+    def list_by_department(self, department_id: str) -> list[DocumentRecord]:
+        return [doc for doc in self._documents.values() if doc.department_id == department_id]
 
     def upsert(self, record: DocumentRecord) -> DocumentRecord:
         self._documents[record.document_id] = record

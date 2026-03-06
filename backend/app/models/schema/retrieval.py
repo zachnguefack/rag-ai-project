@@ -8,8 +8,13 @@ class RAGQueryRequest(BaseModel):
     mode: str = Field(default="balanced", pattern="^(strict|balanced)$", examples=["balanced"])
     strict_document_scope: bool | None = Field(
         default=None,
-        description="When true, only returns answers if sufficient document evidence is found.",
+        description="When true, only returns answers if sufficient authorized document evidence is found.",
         examples=[True],
+    )
+    document_ids: list[str] | None = Field(
+        default=None,
+        description="Optional strict scope document IDs (internal IDs only, never filesystem paths).",
+        examples=[["doc-ops"]],
     )
 
 

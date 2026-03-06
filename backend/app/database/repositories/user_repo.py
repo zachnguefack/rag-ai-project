@@ -34,7 +34,21 @@ class UserRepository:
         record.roles = roles
         return record
 
-    def create(self, username: str, email: str, password_hash: str, roles: list[RoleName]) -> UserRecord:
+    def set_department(self, user_id: str, department_id: str) -> UserRecord | None:
+        record = self._records.get(user_id)
+        if record is None:
+            return None
+        record.department_id = department_id
+        return record
+
+    def create(
+        self,
+        username: str,
+        email: str,
+        password_hash: str,
+        roles: list[RoleName],
+        department_id: str = "dept-general",
+    ) -> UserRecord:
         user_id = f"u-{secrets.token_hex(8)}"
         record = UserRecord(
             user_id=user_id,
@@ -42,6 +56,7 @@ class UserRepository:
             email=email,
             password_hash=password_hash,
             roles=roles,
+            department_id=department_id,
         )
         self._records[user_id] = record
         return record
@@ -51,6 +66,7 @@ class UserRepository:
             user_id=record.user_id,
             username=record.username,
             email=str(record.email),
+            department_id=record.department_id,
             is_active=record.is_active,
             roles=roles,
             document_allow_list=frozenset(record.document_allow_list),

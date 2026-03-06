@@ -10,6 +10,7 @@ class UserRecord(BaseModel):
     username: str
     email: EmailStr
     password_hash: str
+    department_id: str = "dept-general"
     is_active: bool = True
     roles: list[RoleName] = Field(default_factory=list)
     document_allow_list: list[str] = Field(default_factory=list)

@@ -4,12 +4,14 @@ from fastapi import HTTPException, status
 
 from app.database.repositories.document_repo import DocumentRepository
 from app.database.repositories.role_repo import RoleRepository
+from app.database.repositories.user_document_access_repo import UserDocumentAccessRepository
 from app.database.repositories.user_repo import UserRepository
 from app.models.domain.role import Role
 from app.models.domain.user import User
 from app.models.persistence.permission import PermissionCheckResult
 from app.models.schema.admin import RBACValidateResponse
-from app.security.policies import DOCUMENT_GLOBAL_ACCESS_ROLES, Permission, RoleName
+from app.security.policies import Permission, RoleName
+from app.services.scope_builder_service import ScopeBuilderService
 
 
 class RBACService:
@@ -18,10 +20,13 @@ class RBACService:
         user_repository: UserRepository | None = None,
         role_repository: RoleRepository | None = None,
         document_repository: DocumentRepository | None = None,
+        user_document_access_repository: UserDocumentAccessRepository | None = None,
     ) -> None:
         self._users = user_repository or UserRepository()
         self._roles = role_repository or RoleRepository()
         self._documents = document_repository or DocumentRepository()
+        self._access = user_document_access_repository or UserDocumentAccessRepository()
+        self._scope_builder = ScopeBuilderService(self._documents, self._access)
 
     def resolve_user(self, user_id: str) -> User:
         record = self._users.get(user_id)
@@ -106,20 +111,9 @@ class RBACService:
         if document is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document does not exist.")
 
-        if user.role_names & DOCUMENT_GLOBAL_ACCESS_ROLES:
-            return
-
-        if document.owner_user_id == user.user_id:
-            return
-
-        if user.user_id in document.allowed_users or document_id in user.document_allow_list:
-            return
-
-        allowed_roles = {RoleName(value) for value in document.allowed_roles}
-        if allowed_roles & user.role_names:
-            return
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: user is not authorized for this document.",
-        )
+        authorized_ids = set(self._scope_builder.build_authorized_scope(user_id=user.user_id, department_id=user.department_id))
+        if document_id not in authorized_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: user is not authorized for this document.",
+            )

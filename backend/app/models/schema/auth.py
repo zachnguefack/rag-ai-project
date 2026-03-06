@@ -33,6 +33,7 @@ class MeResponse(BaseModel):
     username: str = Field(..., examples=["jane.doe"])
     email: EmailStr = Field(..., examples=["jane.doe@company.com"])
     is_active: bool = Field(..., examples=[True])
+    department_id: str = Field(..., examples=["dept-operations"])
     roles: list[RoleName]
 
 

@@ -11,6 +11,7 @@ class User:
     user_id: str
     username: str
     email: str
+    department_id: str
     is_active: bool = True
     roles: tuple[Role, ...] = field(default_factory=tuple)
     document_allow_list: frozenset[str] = field(default_factory=frozenset)

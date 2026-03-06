@@ -107,3 +107,38 @@ Response:
 ```
 
 If `document_id` is provided, validation uses `RBACService.enforce_document_access` and remains deny-by-default.
+
+## Department-based document access model
+
+This backend now applies a department-first secure access model for RAG retrieval:
+
+- User access baseline: all documents in the user's `department_id`.
+- Optional explicit grants: specific document IDs added per user.
+- Optional revocations: explicit grants can be revoked and removed from final scope.
+- Deny-by-default: any document outside computed scope is denied.
+
+Final scope formula:
+
+`authorized_document_ids = documents_of_user_department + user_explicit_document_grants - revoked_document_grants`
+
+Retrieval sequence:
+
+1. Authenticate user.
+2. Resolve user department.
+3. Compute authorized scope.
+4. Run retrieval only on authorized `document_id` values.
+5. Keep strict document scope behavior for no-evidence responses.
+
+### New admin endpoints
+
+- `GET /api/v1/admin/departments`
+- `POST /api/v1/admin/departments`
+- `GET /api/v1/admin/departments/{department_id}`
+- `GET /api/v1/admin/departments/{department_id}/documents`
+- `PUT /api/v1/admin/users/{user_id}/department`
+- `POST /api/v1/admin/users/{user_id}/document-access`
+- `GET /api/v1/admin/users/{user_id}/document-access`
+- `DELETE /api/v1/admin/users/{user_id}/document-access/{document_id}`
+- `GET /api/v1/admin/users/{user_id}/document-scope`
+
+Use these endpoints in Swagger to test inheritance (department documents), grants, and revocations.
