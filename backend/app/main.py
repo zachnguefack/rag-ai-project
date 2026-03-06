@@ -9,8 +9,10 @@ from app.bootstrap.dev_rbac_seed import seed_dev_rbac_users
 from app.config.settings import BackendSettings, load_settings
 from app.security.middleware import RBACMiddleware
 from app.services.auth_service import AuthService
+from app.services.document_access_service import DocumentAccessService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
+from app.services.scope_builder_service import ScopeBuilderService
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +47,9 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
         openapi_tags=OPENAPI_TAGS,
     )
 
-    service = RAGApplicationService(runtime_settings)
+    document_access_service = DocumentAccessService()
+    scope_builder_service = ScopeBuilderService(document_access_service=document_access_service)
+    service = RAGApplicationService(runtime_settings, scope_builder=scope_builder_service)
     rbac_service = RBACService()
     auth_service = AuthService(settings=runtime_settings)
 
