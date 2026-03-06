@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from app.api.v1.router import build_v1_router
 from app.bootstrap.dev_rbac_seed import seed_dev_rbac_users
+from app.bootstrap.dev_seed_dataset import seed_dev_dataset
 from app.config.settings import BackendSettings, load_settings
 from app.security.middleware import RBACMiddleware
 from app.services.auth_service import AuthService
@@ -76,6 +77,7 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
     def startup_event() -> None:
         init_database()
         seed_dev_rbac_users(settings=runtime_settings, rbac_service=rbac_service)
+        seed_dev_dataset(settings=runtime_settings)
         logger.info("[STARTUP] Application startup completed")
 
     app.add_middleware(RBACMiddleware, rbac_service=rbac_service, auth_service=auth_service)
