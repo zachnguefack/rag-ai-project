@@ -1,40 +1,48 @@
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, Security, status
+from fastapi.security import APIKeyHeader
 
 from app.config.settings import BackendSettings, load_settings
-from fastapi.security import APIKeyHeader
+from app.database.repositories.department_repo import DepartmentRepository
 from app.database.repositories.document_repo import DocumentRepository
 from app.database.repositories.ingest_job_repo import IngestJobRepository
+from app.database.repositories.user_document_access_repo import UserDocumentAccessRepository
+from app.database.repositories.user_repo import UserRepository
 from app.models.domain.user import User
 from app.security.oauth2 import bearer_scheme
-from app.services.auth_service import AuthService
 from app.services.audit_service import AuditService
+from app.services.auth_service import AuthService
+from app.services.department_service import DepartmentService
+from app.services.document_access_service import DocumentAccessService
 from app.services.document_service import DocumentService
 from app.services.ingestion_service import IngestionService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
 from app.services.retrieval_service import RetrievalService
-
+from app.services.scope_builder_service import ScopeBuilderService
+from app.services.secure_retriever import SecureRetriever
 
 _runtime_settings: BackendSettings | None = None
 _runtime_service: RAGApplicationService | None = None
 _runtime_rbac: RBACService | None = None
 _runtime_auth: AuthService | None = None
 _runtime_document_repo: DocumentRepository | None = None
+_runtime_department_repo: DepartmentRepository | None = None
+_runtime_user_repo: UserRepository | None = None
+_runtime_user_document_access_repo: UserDocumentAccessRepository | None = None
+_runtime_scope_builder: ScopeBuilderService | None = None
+_runtime_document_access_service: DocumentAccessService | None = None
+_runtime_department_service: DepartmentService | None = None
 _runtime_document_service: DocumentService | None = None
 _runtime_audit_service: AuditService | None = None
 _runtime_retrieval_service: RetrievalService | None = None
+_runtime_secure_retriever: SecureRetriever | None = None
 _runtime_ingestion_service: IngestionService | None = None
 _runtime_ingest_job_repo: IngestJobRepository | None = None
 
-
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
-x_user_id_header = APIKeyHeader(
-    name="X-User-Id",
-    auto_error=False,
-    description="Local/dev identity header consumed by RBAC resolution.",
-)
+x_user_id_header = APIKeyHeader(name="X-User-Id", auto_error=False, description="Local/dev identity header consumed by RBAC resolution.")
 
 
 def get_settings() -> BackendSettings:
@@ -49,6 +57,37 @@ def get_document_repository() -> DocumentRepository:
     if _runtime_document_repo is None:
         _runtime_document_repo = DocumentRepository()
     return _runtime_document_repo
+
+
+def get_user_repository() -> UserRepository:
+    global _runtime_user_repo
+    if _runtime_user_repo is None:
+        _runtime_user_repo = UserRepository()
+    return _runtime_user_repo
+
+
+def get_department_repository() -> DepartmentRepository:
+    global _runtime_department_repo
+    if _runtime_department_repo is None:
+        _runtime_department_repo = DepartmentRepository()
+    return _runtime_department_repo
+
+
+def get_user_document_access_repository() -> UserDocumentAccessRepository:
+    global _runtime_user_document_access_repo
+    if _runtime_user_document_access_repo is None:
+        _runtime_user_document_access_repo = UserDocumentAccessRepository()
+    return _runtime_user_document_access_repo
+
+
+def get_scope_builder_service(
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    user_document_access_repository: UserDocumentAccessRepository = Depends(get_user_document_access_repository),
+) -> ScopeBuilderService:
+    global _runtime_scope_builder
+    if _runtime_scope_builder is None:
+        _runtime_scope_builder = ScopeBuilderService(document_repository, user_document_access_repository)
+    return _runtime_scope_builder
 
 
 def get_ingest_job_repository() -> IngestJobRepository:
@@ -82,20 +121,66 @@ def get_ingestion_service(
     return _runtime_ingestion_service
 
 
-def get_rbac_service(document_repository: DocumentRepository = Depends(get_document_repository)) -> RBACService:
+def get_rbac_service(
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    user_repository: UserRepository = Depends(get_user_repository),
+    user_document_access_repository: UserDocumentAccessRepository = Depends(get_user_document_access_repository),
+) -> RBACService:
     global _runtime_rbac
     if _runtime_rbac is None:
-        _runtime_rbac = RBACService(document_repository=document_repository)
+        _runtime_rbac = RBACService(
+            document_repository=document_repository,
+            user_repository=user_repository,
+            user_document_access_repository=user_document_access_repository,
+        )
     return _runtime_rbac
+
+
+def get_document_access_service(
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    user_document_access_repository: UserDocumentAccessRepository = Depends(get_user_document_access_repository),
+    scope_builder_service: ScopeBuilderService = Depends(get_scope_builder_service),
+    rbac_service: RBACService = Depends(get_rbac_service),
+) -> DocumentAccessService:
+    global _runtime_document_access_service
+    if _runtime_document_access_service is None:
+        _runtime_document_access_service = DocumentAccessService(
+            document_repository=document_repository,
+            user_document_access_repository=user_document_access_repository,
+            scope_builder=scope_builder_service,
+            rbac_service=rbac_service,
+        )
+    return _runtime_document_access_service
+
+
+def get_secure_retriever(
+    retrieval_service: RetrievalService = Depends(get_retrieval_service),
+    document_access_service: DocumentAccessService = Depends(get_document_access_service),
+) -> SecureRetriever:
+    global _runtime_secure_retriever
+    if _runtime_secure_retriever is None:
+        _runtime_secure_retriever = SecureRetriever(retrieval_service, document_access_service)
+    return _runtime_secure_retriever
+
+
+def get_department_service(
+    department_repository: DepartmentRepository = Depends(get_department_repository),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+) -> DepartmentService:
+    global _runtime_department_service
+    if _runtime_department_service is None:
+        _runtime_department_service = DepartmentService(department_repository, document_repository)
+    return _runtime_department_service
 
 
 def get_document_service(
     document_repository: DocumentRepository = Depends(get_document_repository),
     rbac_service: RBACService = Depends(get_rbac_service),
+    document_access_service: DocumentAccessService = Depends(get_document_access_service),
 ) -> DocumentService:
     global _runtime_document_service
     if _runtime_document_service is None:
-        _runtime_document_service = DocumentService(document_repository=document_repository, rbac_service=rbac_service)
+        _runtime_document_service = DocumentService(document_repository, rbac_service, document_access_service)
     return _runtime_document_service
 
 

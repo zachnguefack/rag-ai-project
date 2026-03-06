@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from pydantic import BaseModel, Field
 
 
 class DocumentMetadata(BaseModel):
-    department: str
+    department_id: str
     owner: str
     classification: str
-    permissions: list[str] = Field(default_factory=list)
+    document_type: str = "policy"
+    status: str = "active"
 
 
 class DocumentVersionRecord(BaseModel):
@@ -19,11 +22,13 @@ class DocumentVersionRecord(BaseModel):
 class DocumentRecord(BaseModel):
     document_id: str
     title: str
-    owner_user_id: str
-    allowed_roles: list[str] = Field(default_factory=list)
-    allowed_users: list[str] = Field(default_factory=list)
+    department_id: str
+    document_type: str = "policy"
+    owner: str
     classification: str = "internal"
-    department: str = "general"
+    status: str = "active"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     versions: list[DocumentVersionRecord] = Field(default_factory=list)
 
     @property

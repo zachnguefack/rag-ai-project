@@ -17,6 +17,7 @@ _DEFAULT_DEV_USERS: tuple[dict[str, object], ...] = (
         "email": "admin@local.dev",
         "password": "Admin123!",
         "roles": [RoleName.SUPER_ADMINISTRATOR],
+        "department_id": "dept-general",
         "label": "Super Administrator",
     },
     {
@@ -24,6 +25,7 @@ _DEFAULT_DEV_USERS: tuple[dict[str, object], ...] = (
         "email": "sysadmin@local.dev",
         "password": "Admin123!",
         "roles": [RoleName.SYSTEM_ADMINISTRATOR],
+        "department_id": "dept-general",
         "label": "System Administrator",
     },
     {
@@ -31,6 +33,7 @@ _DEFAULT_DEV_USERS: tuple[dict[str, object], ...] = (
         "email": "docadmin@local.dev",
         "password": "Admin123!",
         "roles": [RoleName.DOCUMENT_ADMINISTRATOR],
+        "department_id": "dept-operations",
         "label": "Document Administrator",
     },
     {
@@ -38,6 +41,7 @@ _DEFAULT_DEV_USERS: tuple[dict[str, object], ...] = (
         "email": "poweruser@local.dev",
         "password": "Admin123!",
         "roles": [RoleName.POWER_USER],
+        "department_id": "dept-engineering",
         "label": "Power User",
     },
     {
@@ -45,6 +49,7 @@ _DEFAULT_DEV_USERS: tuple[dict[str, object], ...] = (
         "email": "user@local.dev",
         "password": "User123!",
         "roles": [RoleName.STANDARD_USER],
+        "department_id": "dept-operations",
         "label": "Standard User",
     },
     {
@@ -52,6 +57,7 @@ _DEFAULT_DEV_USERS: tuple[dict[str, object], ...] = (
         "email": "compliance@local.dev",
         "password": "Compliance123!",
         "roles": [RoleName.COMPLIANCE_OFFICER],
+        "department_id": "dept-compliance",
         "label": "Compliance Officer",
     },
 )
@@ -80,6 +86,7 @@ def seed_dev_rbac_users(settings: BackendSettings, rbac_service: RBACService) ->
             email=str(account["email"]),
             password_hash=hash_password(str(account["password"])),
             roles=[],
+            department_id=str(account["department_id"]),
         )
         rbac_service.replace_user_roles(created.user_id, list(account["roles"]))
         logger.info("[BOOTSTRAP] %s created: %s", account["label"], account["username"])

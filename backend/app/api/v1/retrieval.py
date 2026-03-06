@@ -2,52 +2,32 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_audit_service, get_current_user, get_document_repository, get_rbac_service, get_retrieval_service, validate_api_key
-from app.database.repositories.document_repo import DocumentRepository
+from app.api.deps import (
+    get_audit_service,
+    get_current_user,
+    get_rbac_service,
+    get_secure_retriever,
+    validate_api_key,
+)
 from app.models.domain.user import User
 from app.models.schema.common import ErrorResponse
 from app.models.schema.retrieval import RAGQueryRequest, RAGQueryResponse
-from app.rag_engine.retrieval.filters import document_id_filter
-from app.security.policies import DOCUMENT_GLOBAL_ACCESS_ROLES, Permission
+from app.security.policies import Permission
 from app.services.audit_service import AuditService
 from app.services.rbac_service import RBACService
-from app.services.retrieval_service import RetrievalService
+from app.services.secure_retriever import SecureRetriever
 
 router = APIRouter(tags=["RAG Query"])
-
-
-def _is_document_accessible(user: User, document_id: str, owner_user_id: str, allowed_users: set[str], allowed_roles: set[str]) -> bool:
-    if user.role_names & DOCUMENT_GLOBAL_ACCESS_ROLES:
-        return True
-    if owner_user_id == user.user_id:
-        return True
-    if user.user_id in allowed_users or document_id in user.document_allow_list:
-        return True
-
-    user_roles = {role.value for role in user.role_names}
-    return bool(user_roles & allowed_roles)
-
-
-def _build_accessible_document_ids(user: User, document_repository: DocumentRepository) -> list[str]:
-    docs = document_repository.list()
-    return [
-        doc.document_id
-        for doc in docs
-        if _is_document_accessible(
-            user=user,
-            document_id=doc.document_id,
-            owner_user_id=doc.owner_user_id,
-            allowed_users=set(doc.allowed_users),
-            allowed_roles=set(doc.allowed_roles),
-        )
-    ]
 
 
 @router.post(
     '/rag/query',
     response_model=RAGQueryResponse,
     summary="Query enterprise knowledge base",
-    description="Answers a user question using ACL-aware retrieval and grounded generation.",
+    description=(
+        "Answers a user question using secure department-based retrieval scope. "
+        "Access scope is resolved before retrieval: department docs + explicit grants - revoked grants."
+    ),
     responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
     dependencies=[Depends(validate_api_key)],
 )
@@ -55,21 +35,18 @@ def rag_query(
     request: RAGQueryRequest,
     user: User = Depends(get_current_user),
     rbac_service: RBACService = Depends(get_rbac_service),
-    document_repository: DocumentRepository = Depends(get_document_repository),
-    retrieval_service: RetrievalService = Depends(get_retrieval_service),
+    secure_retriever: SecureRetriever = Depends(get_secure_retriever),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> RAGQueryResponse:
     rbac_service.enforce_permission(user, Permission.SEARCH_DOCUMENT)
     rbac_service.enforce_permission(user, Permission.READ_DOCUMENT)
 
-    accessible_doc_ids = _build_accessible_document_ids(user=user, document_repository=document_repository)
-    metadata_filter = document_id_filter(accessible_doc_ids) if accessible_doc_ids else None
-
-    result = retrieval_service.query(
+    result = secure_retriever.retrieve(
         question=request.question,
+        user=user,
         mode=request.mode,
         strict_document_scope=request.strict_document_scope,
-        metadata_filter=metadata_filter,
+        document_ids=request.document_ids,
     )
 
     audit_service.record_query_event(

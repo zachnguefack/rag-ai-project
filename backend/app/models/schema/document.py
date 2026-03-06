@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -20,14 +22,15 @@ class DocumentAccessResponse(BaseModel):
 
 
 class DocumentMetadataResponse(BaseModel):
-    department: str = Field(..., examples=["Finance"])
+    department_id: str = Field(..., examples=["dept-finance"])
     owner: str = Field(..., examples=["jane.doe"])
     classification: str = Field(..., examples=["internal"])
-    permissions: list[str] = Field(default_factory=list, examples=[["read", "update"]])
+    document_type: str = Field(default="policy", examples=["policy"])
+    status: str = Field(default="active", examples=["active"])
 
 
 class DocumentCreateRequest(BaseModel):
-    document_id: str = Field(..., examples=["policy-2026-001"])
+    document_id: str = Field(..., examples=["policy-2026-001"], description="Internal document identifier, never a filesystem path.")
     title: str = Field(..., examples=["Travel and Expense Policy"])
     content: str = Field(..., examples=["Employees must submit expense reports within 30 days..."])
     metadata: DocumentMetadataResponse
@@ -45,6 +48,8 @@ class DocumentResponse(BaseModel):
     current_version: int
     content: str
     metadata: DocumentMetadataResponse
+    created_at: datetime
+    updated_at: datetime
 
 
 class DocumentVersionResponse(BaseModel):

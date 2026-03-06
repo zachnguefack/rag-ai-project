@@ -154,3 +154,48 @@ The FastAPI backend exposes admin RBAC APIs under `/api/v1/admin` in the **Roles
 - Use `/api/v1/admin/rbac/matrix` to inspect the full RBAC matrix and `/api/v1/admin/rbac/validate` to test user permission outcomes.
 
 Detailed usage and examples are documented in `docs/rbac_backend.md`.
+
+## Department-based secure document access (new)
+
+The backend now uses a simpler, maintainable secure access model for enterprise RAG:
+
+- Each user has one **primary department**.
+- Each document has one **primary department**.
+- Users can access documents in their own department by default.
+- Admins can grant additional per-user document access.
+- Admins can revoke those grants.
+
+Effective retrieval scope is computed before retrieval as:
+
+`authorized_document_ids = department_documents + explicit_grants - revoked_grants`
+
+Security guarantees:
+
+1. Deny-by-default.
+2. Scope computed before vector/keyword retrieval.
+3. Unauthorized chunks are excluded from retrieval and post-filtered.
+4. Strict document scope remains supported.
+
+### Admin APIs for access operations
+
+All under `/api/v1/admin`:
+
+- `GET /departments`
+- `POST /departments`
+- `GET /departments/{department_id}`
+- `GET /departments/{department_id}/documents`
+- `PUT /users/{user_id}/department`
+- `POST /users/{user_id}/document-access`
+- `GET /users/{user_id}/document-access`
+- `DELETE /users/{user_id}/document-access/{document_id}`
+- `GET /users/{user_id}/document-scope`
+
+### Swagger validation steps
+
+1. Login as an admin (`sysadmin` or `admin`) in `/docs`.
+2. Assign a user department using `PUT /api/v1/admin/users/{user_id}/department`.
+3. Check baseline scope with `GET /api/v1/admin/users/{user_id}/document-scope`.
+4. Grant out-of-department doc access and re-check scope.
+5. Revoke grant and verify document disappears from scope.
+
+`document_id` is always an internal identifier, never a filesystem path.
