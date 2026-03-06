@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 
 from app.api.v1.router import build_v1_router
+from app.bootstrap.dev_rbac_seed import seed_dev_rbac_users
 from app.config.settings import BackendSettings, load_settings
 from app.security.middleware import RBACMiddleware
 from app.services.auth_service import AuthService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
+
+
+logger = logging.getLogger(__name__)
 
 OPENAPI_TAGS = [
     {"name": "Authentication", "description": "User registration, login, logout, and identity endpoints."},
@@ -59,6 +65,15 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
     app.dependency_overrides[BackendSettings] = settings_dependency
     app.dependency_overrides[RBACService] = rbac_dependency
     app.dependency_overrides[AuthService] = auth_dependency
+
+    def init_database() -> None:
+        logger.info("[STARTUP] Initializing database session metadata")
+
+    @app.on_event("startup")
+    def startup_event() -> None:
+        init_database()
+        seed_dev_rbac_users(settings=runtime_settings, rbac_service=rbac_service)
+        logger.info("[STARTUP] Application startup completed")
 
     app.add_middleware(RBACMiddleware, rbac_service=rbac_service, auth_service=auth_service)
     app.include_router(build_v1_router(), prefix='/api/v1')
