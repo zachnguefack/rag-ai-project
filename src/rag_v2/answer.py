@@ -97,7 +97,6 @@ class RAGService:
         question: str,
         policy: Optional[AnswerPolicy] = None,
         metadata_filter: Optional[Dict[str, Any]] = None,
-        user: Any | None = None,
     ) -> Dict[str, Any]:
         """Run retrieval, validate evidence, and optionally call the LLM."""
         policy = policy or AnswerPolicy()
@@ -110,7 +109,6 @@ class RAGService:
             score_threshold=policy.score_threshold,
             metadata_filter=metadata_filter,
             lambda_mult=policy.lambda_mult,
-            user=user,
         )
         confidence = self.compute_confidence(results)
         doc_grounded = self._has_sufficient_retrieval_evidence(results, confidence, policy)

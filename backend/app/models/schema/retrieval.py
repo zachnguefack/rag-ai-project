@@ -17,5 +17,3 @@ class RAGQueryResponse(BaseModel):
     answer: str
     citations: list[str]
     confidence_score: float
-    authorized_document_ids_count: int = Field(default=0, description="Number of documents in computed secure retrieval scope.")
-    strict_scope_blocked: bool = Field(default=False, description="True when strict scope blocked LLM generation.")

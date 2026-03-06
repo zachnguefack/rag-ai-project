@@ -9,10 +9,7 @@ from app.models.domain.role import Role
 from app.models.domain.user import User
 from app.models.persistence.permission import PermissionCheckResult
 from app.models.schema.admin import RBACValidateResponse
-from app.security.policies import Permission, RoleName
-
-
-from app.services.document_access_service import DocumentAccessService
+from app.security.policies import DOCUMENT_GLOBAL_ACCESS_ROLES, Permission, RoleName
 
 
 class RBACService:
@@ -25,7 +22,6 @@ class RBACService:
         self._users = user_repository or UserRepository()
         self._roles = role_repository or RoleRepository()
         self._documents = document_repository or DocumentRepository()
-        self._document_access = DocumentAccessService(document_repository=self._documents)
 
     def resolve_user(self, user_id: str) -> User:
         record = self._users.get(user_id)
@@ -110,6 +106,20 @@ class RBACService:
         if document is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document does not exist.")
 
-        decision = self._document_access.can_access_document(user=user, document=document)
-        if not decision.allowed:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Access denied: {decision.reason}")
+        if user.role_names & DOCUMENT_GLOBAL_ACCESS_ROLES:
+            return
+
+        if document.owner_user_id == user.user_id:
+            return
+
+        if user.user_id in document.allowed_users or document_id in user.document_allow_list:
+            return
+
+        allowed_roles = {RoleName(value) for value in document.allowed_roles}
+        if allowed_roles & user.role_names:
+            return
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: user is not authorized for this document.",
+        )

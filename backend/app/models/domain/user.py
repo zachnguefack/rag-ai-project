@@ -14,9 +14,6 @@ class User:
     is_active: bool = True
     roles: tuple[Role, ...] = field(default_factory=tuple)
     document_allow_list: frozenset[str] = field(default_factory=frozenset)
-    department: str = "general"
-    classification_level: str = "internal"
-    allowed_document_scopes: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def role_names(self) -> frozenset[RoleName]:
