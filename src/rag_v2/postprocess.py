@@ -102,12 +102,8 @@ def retrieve_postprocessed(
     max_per_source: int = 3,
     max_per_page: int = 1,
     lambda_mult: float = 0.75,
-    user: Any | None = None,
 ) -> List[Dict[str, Any]]:
-    retrieve_kwargs = {"top_k": top_k_retrieve, "score_threshold": score_threshold, "metadata_filter": metadata_filter}
-    if user is not None:
-        retrieve_kwargs["user"] = user
-    raw = rag_retriever.retrieve(query, **retrieve_kwargs)
+    raw = rag_retriever.retrieve(query, top_k=top_k_retrieve, score_threshold=score_threshold, metadata_filter=metadata_filter)
     deduped = dedup_results_by_source_page(raw, max_per_source=max_per_source, max_per_page=max_per_page)
     ranked = rank_with_hybrid_score(deduped, query)
     return mmr_select(ranked, k=final_k, lambda_mult=lambda_mult)
