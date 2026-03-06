@@ -67,6 +67,15 @@ class VectorStore:
             doc_id = self._stable_chunk_id(source, page, chunk_index, content)
 
             clean_md = self._sanitize_metadata(md)
+            document_id = str(clean_md.get("document_id") or source.split("/")[-1].split(".")[0])
+            clean_md.setdefault("document_id", document_id)
+            clean_md.setdefault("version_id", f"{document_id}-v1")
+            clean_md.setdefault("department", str(clean_md.get("department") or "general"))
+            clean_md.setdefault("classification", str(clean_md.get("classification") or "internal"))
+            clean_md.setdefault("status", str(clean_md.get("status") or "approved"))
+            clean_md.setdefault("allowed_roles", str(clean_md.get("allowed_roles") or ""))
+            clean_md.setdefault("allowed_departments", str(clean_md.get("allowed_departments") or ""))
+            clean_md.setdefault("owner", str(clean_md.get("owner") or "unknown"))
             clean_md.update({"source": source, "page": page, "chunk_index": chunk_index, "content_length": len(content)})
 
             ids.append(doc_id)

@@ -107,3 +107,37 @@ Response:
 ```
 
 If `document_id` is provided, validation uses `RBACService.enforce_document_access` and remains deny-by-default.
+
+## Secure document-scoped RAG model (enterprise)
+
+The backend now enforces **deny-by-default secure retrieval scope** before any vector/keyword retrieval and before LLM generation.
+
+### Access decision model
+A document is accessible only when all mandatory checks pass and one authorization rule matches:
+- mandatory checks: allowed status (`approved`/`indexed`) + classification compatibility;
+- authorization rules: global admin role, owner, explicit assignment, role ACL, department ACL, or site/document scope.
+
+### Secure retrieval flow
+1. Authenticate user.
+2. Build `authorized_document_ids` with `ScopeBuilderService` + `DocumentAccessService`.
+3. Execute vector retrieval with `document_id in authorized_document_ids` filter.
+4. Execute keyword retrieval with the same scope.
+5. Post-filter chunks and discard any unauthorized chunk.
+6. Rerank and validate evidence.
+7. If strict scope is enabled and evidence is insufficient, block generation and return enterprise-safe message.
+8. Persist audit event with correlation ID and access decision.
+
+### Strict document scope behavior
+When strict scope is enabled, the LLM is never called if authorized evidence is insufficient. The API returns:
+
+> No relevant information was found in the available authorized documentation.
+> Your question may be outside the scope of the documentation assigned to you.
+> Please contact your administrator or the relevant department for further assistance.
+
+### Admin validation endpoints
+- `GET /api/v1/admin/rbac/matrix`
+- `POST /api/v1/admin/rbac/validate`
+- `GET /api/v1/admin/users/{user_id}/document-scope`
+- `GET /api/v1/admin/documents/{document_id}/acl`
+
+These endpoints support operational validation of secure scoping and ACL behavior.

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import get_audit_service, get_current_user, get_rbac_service, validate_api_key
+from app.api.deps import get_audit_service, get_current_user, get_document_repository, get_rbac_service, get_scope_builder_service, validate_api_key
 from app.models.domain.user import User
 from app.models.schema.admin import (
     PermissionListResponse,
@@ -24,6 +24,8 @@ from app.security.policies import Permission, RoleName
 from app.security.rbac import require_permissions
 from app.services.audit_service import AuditService
 from app.services.rbac_service import RBACService
+from app.services.scope_builder_service import ScopeBuilderService
+from app.database.repositories.document_repo import DocumentRepository
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -59,8 +61,13 @@ def list_audit_logs(
         AuditLogResponse(
             event_id=item.event_id,
             user_id=item.user_id,
+            correlation_id=item.correlation_id,
             question=item.question,
+            authorized_document_ids_count=item.authorized_document_ids_count,
             documents_retrieved=list(item.documents_retrieved),
+            chunks_used=list(item.chunks_used),
+            access_decision=item.access_decision,
+            strict_scope_blocked=item.strict_scope_blocked,
             answer_generated=item.answer_generated,
             timestamp=item.timestamp,
             confidence_score=item.confidence_score,
@@ -93,8 +100,13 @@ def get_audit_log(
     return AuditLogResponse(
         event_id=event.event_id,
         user_id=event.user_id,
+        correlation_id=event.correlation_id,
         question=event.question,
+        authorized_document_ids_count=event.authorized_document_ids_count,
         documents_retrieved=list(event.documents_retrieved),
+        chunks_used=list(event.chunks_used),
+        access_decision=event.access_decision,
+        strict_scope_blocked=event.strict_scope_blocked,
         answer_generated=event.answer_generated,
         timestamp=event.timestamp,
         confidence_score=event.confidence_score,
@@ -284,3 +296,40 @@ def validate_rbac_access(
         permission=payload.permission,
         document_id=payload.document_id,
     )
+
+
+@router.get("/users/{user_id}/document-scope", dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Roles & Permissions"])
+@require_permissions(Permission.MANAGE_ROLES)
+def get_user_document_scope(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    scope_builder: ScopeBuilderService = Depends(get_scope_builder_service),
+) -> dict:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_ROLES)
+    scoped_user = rbac_service.resolve_user(user_id)
+    scope = scope_builder.build_scope(scoped_user)
+    return {"user_id": user_id, "authorized_document_ids": scope.authorized_document_ids, "count": len(scope.authorized_document_ids)}
+
+
+@router.get("/documents/{document_id}/acl", dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Roles & Permissions"])
+@require_permissions(Permission.MANAGE_ROLES)
+def get_document_acl(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+) -> dict:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_ROLES)
+    doc = document_repository.get(document_id)
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    return {
+        "document_id": doc.document_id,
+        "owner_user_id": doc.owner_user_id,
+        "allowed_users": doc.allowed_users,
+        "allowed_roles": doc.allowed_roles,
+        "allowed_departments": doc.allowed_departments,
+        "status": doc.status,
+        "classification": doc.classification,
+    }

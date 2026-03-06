@@ -34,7 +34,16 @@ class UserRepository:
         record.roles = roles
         return record
 
-    def create(self, username: str, email: str, password_hash: str, roles: list[RoleName]) -> UserRecord:
+    def create(
+        self,
+        username: str,
+        email: str,
+        password_hash: str,
+        roles: list[RoleName],
+        department: str = "general",
+        classification_level: str = "internal",
+        allowed_document_scopes: list[str] | None = None,
+    ) -> UserRecord:
         user_id = f"u-{secrets.token_hex(8)}"
         record = UserRecord(
             user_id=user_id,
@@ -42,6 +51,9 @@ class UserRepository:
             email=email,
             password_hash=password_hash,
             roles=roles,
+            department=department,
+            classification_level=classification_level,
+            allowed_document_scopes=allowed_document_scopes or [],
         )
         self._records[user_id] = record
         return record
@@ -54,4 +66,7 @@ class UserRepository:
             is_active=record.is_active,
             roles=roles,
             document_allow_list=frozenset(record.document_allow_list),
+            department=record.department,
+            classification_level=record.classification_level,
+            allowed_document_scopes=frozenset(record.allowed_document_scopes),
         )
