@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_current_user, get_document_service, get_ingestion_service, get_rbac_service, validate_api_key
 from app.models.domain.user import User
 from app.models.schema.common import ErrorResponse
 from app.models.schema.document import (
+    DocumentACLResponse,
     DocumentAccessResponse,
+    DocumentContentResponse,
     DocumentCreateRequest,
     DocumentDeleteResponse,
+    DocumentListResponse,
+    DocumentMetadataDetailResponse,
     DocumentResponse,
+    DocumentSearchResponse,
     DocumentUpdateRequest,
     DocumentVersionResponse,
     IndexRequest,
@@ -47,6 +52,118 @@ def index_documents(request: IndexRequest, service: IngestionService = Depends(g
         removed_files=job.removed_files,
         reused_existing_index=job.reused_existing_index,
     )
+
+
+@router.get(
+    '/documents',
+    response_model=DocumentListResponse,
+    summary='List visible documents',
+    description='Lists only documents in the authenticated user authorized scope (department scope ± explicit grants/revocations).',
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+)
+def list_visible_documents(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    department_id: str | None = Query(default=None),
+    document_type: str | None = Query(default=None),
+    classification: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    owner: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+) -> DocumentListResponse:
+    return document_service.list_visible_documents(
+        current_user,
+        limit=limit,
+        offset=offset,
+        department_id=department_id,
+        document_type=document_type,
+        classification=classification,
+        status_value=status,
+        owner=owner,
+    )
+
+
+@router.get(
+    '/documents/search',
+    response_model=DocumentSearchResponse,
+    summary='Search visible documents',
+    description='Searches title and metadata fields for documents in the authenticated user authorized scope.',
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+)
+def search_visible_documents(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    department_id: str | None = Query(default=None),
+    classification: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    owner: str | None = Query(default=None),
+    document_type: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+) -> DocumentSearchResponse:
+    return document_service.search_visible_documents(
+        current_user,
+        query=q,
+        limit=limit,
+        offset=offset,
+        department_id=department_id,
+        document_type=document_type,
+        classification=classification,
+        status_value=status,
+        owner=owner,
+    )
+
+
+@router.get(
+    '/documents/{document_id}/metadata',
+    response_model=DocumentMetadataDetailResponse,
+    summary='Get document metadata',
+    description='Returns document metadata only. document_id is an internal identifier.',
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+)
+def get_document_metadata(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+) -> DocumentMetadataDetailResponse:
+    return document_service.get_document_metadata(current_user, document_id)
+
+
+@router.get(
+    '/documents/{document_id}/content',
+    response_model=DocumentContentResponse,
+    summary='Get document content',
+    description='Returns full stored content for an authorized document.',
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+)
+def get_document_content(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+) -> DocumentContentResponse:
+    return document_service.get_document_content(current_user, document_id)
+
+
+@router.get(
+    '/documents/{document_id}/acl',
+    response_model=DocumentACLResponse,
+    summary='Get document ACL',
+    description='Returns effective ACL details for authorized users and admins.',
+    responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+)
+def get_document_acl(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+) -> DocumentACLResponse:
+    return document_service.get_document_acl(current_user, document_id)
 
 
 @router.get(
