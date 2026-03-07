@@ -173,6 +173,13 @@ def get_department_service(
     return _runtime_department_service
 
 
+def get_audit_service() -> AuditService:
+    global _runtime_audit_service
+    if _runtime_audit_service is None:
+        _runtime_audit_service = AuditService()
+    return _runtime_audit_service
+
+
 def get_document_service(
     document_repository: DocumentRepository = Depends(get_document_repository),
     rbac_service: RBACService = Depends(get_rbac_service),
@@ -190,13 +197,6 @@ def get_document_service(
             audit_service,
         )
     return _runtime_document_service
-
-
-def get_audit_service() -> AuditService:
-    global _runtime_audit_service
-    if _runtime_audit_service is None:
-        _runtime_audit_service = AuditService()
-    return _runtime_audit_service
 
 
 def get_auth_service(settings: BackendSettings = Depends(get_settings)) -> AuthService:
