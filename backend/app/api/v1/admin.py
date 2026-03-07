@@ -36,7 +36,13 @@ from app.models.schema.admin import (
 )
 from app.models.schema.audit import AuditLogListResponse, AuditLogResponse
 from app.models.schema.common import ErrorResponse
-from app.models.schema.document import DocumentResponse
+from app.models.schema.document import (
+    AdminDocumentListResponse,
+    DocumentAuditListResponse,
+    DocumentDepartmentAssignmentRequest,
+    DocumentMetadataDetailResponse,
+    DocumentResponse,
+)
 from app.security.policies import Permission, RoleName
 from app.security.rbac import require_permissions
 from app.services.audit_service import AuditService
@@ -241,3 +247,59 @@ def get_user_document_scope(user_id: str, current_user: User = Depends(get_curre
     user = rbac_service.resolve_user(user_id)
     scope = document_access_service.compute_authorized_document_ids(user)
     return UserDocumentScopeResponse(user_id=user.user_id, department_id=user.department_id, authorized_document_ids=scope)
+
+
+@router.get('/documents', response_model=AdminDocumentListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"], summary="List all documents (admin)", description="Global document list for administrators. Not scope-limited.")
+@require_permissions(Permission.MANAGE_USERS)
+def admin_list_documents(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    department_id: str | None = Query(default=None),
+    classification: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    owner: str | None = Query(default=None),
+    document_type: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+) -> AdminDocumentListResponse:
+    return document_service.admin_list_documents(
+        current_user,
+        limit=limit,
+        offset=offset,
+        department_id=department_id,
+        document_type=document_type,
+        classification=classification,
+        status_value=status,
+        owner=owner,
+    )
+
+
+@router.get('/documents/{document_id}', response_model=DocumentResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"], summary="Get document detail (admin)")
+@require_permissions(Permission.MANAGE_USERS)
+def admin_get_document(document_id: str, current_user: User = Depends(get_current_user), document_service: DocumentService = Depends(get_document_service)) -> DocumentResponse:
+    return document_service.admin_get_document(current_user, document_id)
+
+
+@router.put('/documents/{document_id}/department', response_model=DocumentMetadataDetailResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"], summary="Reassign document department", description="Reassigns a document to a different owning department. document_id is an internal identifier.")
+@require_permissions(Permission.MANAGE_USERS)
+def admin_reassign_document_department(
+    document_id: str,
+    payload: DocumentDepartmentAssignmentRequest,
+    current_user: User = Depends(get_current_user),
+    department_service: DepartmentService = Depends(get_department_service),
+    document_service: DocumentService = Depends(get_document_service),
+) -> DocumentMetadataDetailResponse:
+    department_service.get_department(payload.department_id)
+    return document_service.reassign_document_department(current_user, document_id, payload.department_id)
+
+
+@router.get('/documents/{document_id}/audit', response_model=DocumentAuditListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"], summary="Get document audit history")
+@require_permissions(Permission.READ_AUDIT_LOG)
+def admin_get_document_audit(
+    document_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+) -> DocumentAuditListResponse:
+    return document_service.admin_get_document_audit(current_user, document_id, limit=limit, offset=offset)

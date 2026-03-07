@@ -177,10 +177,18 @@ def get_document_service(
     document_repository: DocumentRepository = Depends(get_document_repository),
     rbac_service: RBACService = Depends(get_rbac_service),
     document_access_service: DocumentAccessService = Depends(get_document_access_service),
+    user_document_access_repository: UserDocumentAccessRepository = Depends(get_user_document_access_repository),
+    audit_service: AuditService = Depends(get_audit_service),
 ) -> DocumentService:
     global _runtime_document_service
     if _runtime_document_service is None:
-        _runtime_document_service = DocumentService(document_repository, rbac_service, document_access_service)
+        _runtime_document_service = DocumentService(
+            document_repository,
+            rbac_service,
+            document_access_service,
+            user_document_access_repository,
+            audit_service,
+        )
     return _runtime_document_service
 
 
