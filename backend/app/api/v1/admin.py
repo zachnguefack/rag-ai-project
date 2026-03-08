@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from app.api.deps import (
@@ -211,21 +213,69 @@ def delete_department(department_id: str, current_user: User = Depends(get_curre
     return DepartmentDeleteResponse(**payload)
 
 
-@router.post('/departments/{department_id}/upload', response_model=DepartmentIngestionResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Department Ingestion", "Admin"], summary="Ingest files via multipart upload", description="Accepts drag-and-drop style multipart uploads and stores files under /data/{department_name}/ before indexing.")
+@router.post(
+    '/departments/{department_id}/upload',
+    response_model=DepartmentIngestionResponse,
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    tags=["Department Ingestion", "Admin"],
+    summary="Upload file(s) from client machine",
+    description=(
+        "Upload one or more files from the client machine using multipart/form-data. "
+        "Swagger UI should render a file picker for the `files` field."
+    ),
+)
 @require_permissions(Permission.MANAGE_USERS)
-async def ingest_department_upload(department_id: str, files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user), ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service)) -> DepartmentIngestionResponse:
+async def ingest_department_upload(
+    department_id: str,
+    files: Annotated[list[UploadFile], File(description="One or multiple files to ingest.")],
+    current_user: User = Depends(get_current_user),
+    ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service),
+) -> DepartmentIngestionResponse:
     return await ingestion_service.ingest_upload(user=current_user, department_id=department_id, files=files)
 
 
-@router.post('/departments/{department_id}/ingest-file-path', response_model=DepartmentIngestionResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Department Ingestion", "Admin"], summary="Ingest by explicit file path")
+@router.post(
+    '/departments/{department_id}/ingest-file-path',
+    response_model=DepartmentIngestionResponse,
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    tags=["Department Ingestion", "Admin"],
+    summary="Ingest a single file already on server disk",
+    description=(
+        "Accepts JSON body `{\"file_path\": \"...\"}` for a file path that already exists on the server filesystem. "
+        "The path must be within allowed ingest roots and must point to a supported file."
+    ),
+)
 @require_permissions(Permission.MANAGE_USERS)
-def ingest_department_file_path(department_id: str, payload: DepartmentIngestFilePathRequest, current_user: User = Depends(get_current_user), ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service)) -> DepartmentIngestionResponse:
+def ingest_department_file_path(
+    department_id: str,
+    payload: DepartmentIngestFilePathRequest,
+    current_user: User = Depends(get_current_user),
+    ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service),
+) -> DepartmentIngestionResponse:
     return ingestion_service.ingest_file_path(user=current_user, department_id=department_id, file_path=payload.file_path)
 
 
-@router.post('/departments/{department_id}/ingest-folder-path', response_model=DepartmentIngestionResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Department Ingestion", "Admin"], summary="Ingest all supported files from a folder path", description="Scans supported file types in a folder, copies/registers files in /data/{department_name}, creates document/version metadata, and indexes content.")
+@router.post(
+    '/departments/{department_id}/ingest-folder-path',
+    response_model=DepartmentIngestionResponse,
+    dependencies=[Depends(validate_api_key), Depends(get_current_user)],
+    responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 404: {"model": ErrorResponse}},
+    tags=["Department Ingestion", "Admin"],
+    summary="Ingest all supported files from a folder on server disk",
+    description=(
+        "Accepts JSON body `{\"folder_path\": \"...\"}` for a folder that already exists on the server filesystem. "
+        "All supported files found recursively in that folder are ingested."
+    ),
+)
 @require_permissions(Permission.MANAGE_USERS)
-def ingest_department_folder_path(department_id: str, payload: DepartmentIngestFolderPathRequest, current_user: User = Depends(get_current_user), ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service)) -> DepartmentIngestionResponse:
+def ingest_department_folder_path(
+    department_id: str,
+    payload: DepartmentIngestFolderPathRequest,
+    current_user: User = Depends(get_current_user),
+    ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service),
+) -> DepartmentIngestionResponse:
     return ingestion_service.ingest_folder_path(user=current_user, department_id=department_id, folder_path=payload.folder_path)
 
 
