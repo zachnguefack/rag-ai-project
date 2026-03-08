@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from app.api.deps import (
     get_audit_service,
     get_current_user,
+    get_department_ingestion_service,
     get_department_service,
     get_document_access_service,
     get_rbac_service,
