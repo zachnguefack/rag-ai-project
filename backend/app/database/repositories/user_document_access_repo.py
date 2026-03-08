@@ -44,3 +44,9 @@ class UserDocumentAccessRepository:
         record.is_active = False
         record.revoked_at = datetime.now(timezone.utc)
         return record
+
+    def delete_for_document(self, document_id: str) -> int:
+        keys = [key for key in self._records if key[1] == document_id]
+        for key in keys:
+            del self._records[key]
+        return len(keys)

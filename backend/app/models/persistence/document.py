@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-
 from pydantic import BaseModel, Field
 
 
@@ -14,9 +13,14 @@ class DocumentMetadata(BaseModel):
 
 
 class DocumentVersionRecord(BaseModel):
+    version_id: str = ""
     version: int
     content: str
     metadata: DocumentMetadata
+    storage_path: str = ""
+    checksum: str = ""
+    indexed: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class DocumentRecord(BaseModel):
@@ -27,6 +31,8 @@ class DocumentRecord(BaseModel):
     owner: str
     classification: str = "internal"
     status: str = "active"
+    original_filename: str = ""
+    storage_path: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     versions: list[DocumentVersionRecord] = Field(default_factory=list)

@@ -1,0 +1,167 @@
+from __future__ import annotations
+
+import hashlib
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import HTTPException, UploadFile, status
+
+from app.config.settings import BackendSettings, load_settings
+from app.database.repositories.department_repo import DepartmentRepository
+from app.database.repositories.document_repo import DocumentRepository
+from app.models.domain.user import User
+from app.models.persistence.document import DocumentMetadata, DocumentRecord, DocumentVersionRecord
+from app.models.schema.admin import DepartmentIngestionResponse
+from app.security.policies import Permission
+from app.services.rag_service import RAGApplicationService
+from app.services.rbac_service import RBACService
+
+
+class DepartmentIngestionService:
+    def __init__(
+        self,
+        *,
+        department_repository: DepartmentRepository | None = None,
+        document_repository: DocumentRepository | None = None,
+        rag_service: RAGApplicationService | None = None,
+        rbac_service: RBACService | None = None,
+        settings: BackendSettings | None = None,
+    ) -> None:
+        self._departments = department_repository or DepartmentRepository()
+        self._documents = document_repository or DocumentRepository()
+        self._rag_service = rag_service
+        self._rbac = rbac_service
+        self._settings = settings or load_settings()
+        self._supported = {".pdf", ".txt", ".csv", ".docx", ".xlsx", ".json"}
+
+    def _enforce_admin(self, user: User) -> None:
+        if self._rbac is not None:
+            self._rbac.enforce_permission(user, Permission.INGEST_DOCUMENT)
+            self._rbac.enforce_permission(user, Permission.MANAGE_USERS)
+
+    def _department_dir(self, department_id: str) -> tuple[str, Path]:
+        dept = self._departments.get(department_id)
+        if dept is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found.")
+        target = (self._settings.data_dir / dept.name).resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        return dept.name, target
+
+    def _validate_allowed_path(self, path: Path) -> Path:
+        candidate = path.expanduser().resolve()
+        allowed_roots = [self._settings.data_dir.resolve(), Path.cwd().resolve(), Path('/tmp').resolve()]
+        if not any(str(candidate).startswith(str(root)) for root in allowed_roots):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provided path is outside allowed ingest roots.")
+        return candidate
+
+    def _checksum(self, path: Path) -> str:
+        h = hashlib.sha256()
+        with path.open("rb") as fh:
+            for block in iter(lambda: fh.read(1024 * 1024), b""):
+                h.update(block)
+        return h.hexdigest()
+
+    def _register_file(self, *, department_id: str, owner: str, source_path: Path, storage_path: Path) -> DocumentRecord:
+        now = datetime.now(timezone.utc)
+        content = storage_path.read_text(encoding="utf-8", errors="ignore")
+        doc_id = f"doc-{uuid4().hex[:12]}"
+        ext = storage_path.suffix.lower().lstrip(".") or "file"
+        metadata = DocumentMetadata(
+            department_id=department_id,
+            owner=owner,
+            classification="internal",
+            document_type=ext,
+            status="active",
+        )
+        version = DocumentVersionRecord(
+            version_id=f"{doc_id}-v1",
+            version=1,
+            content=content,
+            metadata=metadata,
+            storage_path=str(storage_path),
+            checksum=self._checksum(storage_path),
+            indexed=False,
+            created_at=now,
+        )
+        record = DocumentRecord(
+            document_id=doc_id,
+            title=storage_path.stem,
+            original_filename=source_path.name,
+            department_id=department_id,
+            owner=owner,
+            document_type=ext,
+            classification="internal",
+            status="active",
+            storage_path=str(storage_path),
+            created_at=now,
+            updated_at=now,
+            versions=[version],
+        )
+        self._documents.upsert(record)
+        return record
+
+    def _index_and_finalize(self, docs: list[DocumentRecord], department_id: str) -> DepartmentIngestionResponse:
+        indexed_files = 0
+        indexed_chunks = 0
+        if self._rag_service is not None and docs:
+            summary = self._rag_service.run_indexing(force_reindex=False)
+            indexed_files = int(summary.get("indexed_files", 0))
+            indexed_chunks = int(summary.get("indexed_chunks", 0))
+            for doc in docs:
+                if doc.versions:
+                    doc.versions[-1].indexed = True
+                self._documents.upsert(doc)
+
+        return DepartmentIngestionResponse(
+            department_id=department_id,
+            ingested_documents=len(docs),
+            indexed_files=indexed_files,
+            indexed_chunks=indexed_chunks,
+            storage_paths=[doc.storage_path for doc in docs if doc.storage_path],
+        )
+
+    async def ingest_upload(self, *, user: User, department_id: str, files: list[UploadFile]) -> DepartmentIngestionResponse:
+        self._enforce_admin(user)
+        _, dept_dir = self._department_dir(department_id)
+        docs: list[DocumentRecord] = []
+        for file in files:
+            suffix = Path(file.filename or "").suffix.lower()
+            if suffix not in self._supported:
+                continue
+            target = dept_dir / Path(file.filename or f"file-{uuid4().hex}").name
+            payload = await file.read()
+            target.write_bytes(payload)
+            docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=Path(file.filename or target.name), storage_path=target))
+        return self._index_and_finalize(docs, department_id)
+
+    def ingest_file_path(self, *, user: User, department_id: str, file_path: str) -> DepartmentIngestionResponse:
+        self._enforce_admin(user)
+        source = self._validate_allowed_path(Path(file_path))
+        if not source.exists() or not source.is_file():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source file was not found.")
+        if source.suffix.lower() not in self._supported:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type.")
+        _, dept_dir = self._department_dir(department_id)
+        target = dept_dir / source.name
+        if source.resolve() != target.resolve():
+            shutil.copy2(source, target)
+        doc = self._register_file(department_id=department_id, owner=user.user_id, source_path=source, storage_path=target)
+        return self._index_and_finalize([doc], department_id)
+
+    def ingest_folder_path(self, *, user: User, department_id: str, folder_path: str) -> DepartmentIngestionResponse:
+        self._enforce_admin(user)
+        source_folder = self._validate_allowed_path(Path(folder_path))
+        if not source_folder.exists() or not source_folder.is_dir():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source folder was not found.")
+        _, dept_dir = self._department_dir(department_id)
+        docs: list[DocumentRecord] = []
+        for path in sorted(source_folder.glob("**/*")):
+            if not path.is_file() or path.suffix.lower() not in self._supported:
+                continue
+            target = dept_dir / path.name
+            if path.resolve() != target.resolve():
+                shutil.copy2(path, target)
+            docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=path, storage_path=target))
+        return self._index_and_finalize(docs, department_id)

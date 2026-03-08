@@ -14,6 +14,7 @@ from app.security.oauth2 import bearer_scheme
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.department_service import DepartmentService
+from app.services.department_ingestion_service import DepartmentIngestionService
 from app.services.document_access_service import DocumentAccessService
 from app.services.document_service import DocumentService
 from app.services.ingestion_service import IngestionService
@@ -34,6 +35,7 @@ _runtime_user_document_access_repo: UserDocumentAccessRepository | None = None
 _runtime_scope_builder: ScopeBuilderService | None = None
 _runtime_document_access_service: DocumentAccessService | None = None
 _runtime_department_service: DepartmentService | None = None
+_runtime_department_ingestion_service: DepartmentIngestionService | None = None
 _runtime_document_service: DocumentService | None = None
 _runtime_audit_service: AuditService | None = None
 _runtime_retrieval_service: RetrievalService | None = None
@@ -166,11 +168,39 @@ def get_secure_retriever(
 def get_department_service(
     department_repository: DepartmentRepository = Depends(get_department_repository),
     document_repository: DocumentRepository = Depends(get_document_repository),
+    user_document_access_repository: UserDocumentAccessRepository = Depends(get_user_document_access_repository),
+    settings: BackendSettings = Depends(get_settings),
+    rag_service: RAGApplicationService = Depends(get_rag_service),
 ) -> DepartmentService:
     global _runtime_department_service
     if _runtime_department_service is None:
-        _runtime_department_service = DepartmentService(department_repository, document_repository)
+        _runtime_department_service = DepartmentService(
+            department_repository=department_repository,
+            document_repository=document_repository,
+            user_document_access_repository=user_document_access_repository,
+            settings=settings,
+            rag_service=rag_service,
+        )
     return _runtime_department_service
+
+
+def get_department_ingestion_service(
+    department_repository: DepartmentRepository = Depends(get_department_repository),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    rag_service: RAGApplicationService = Depends(get_rag_service),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    settings: BackendSettings = Depends(get_settings),
+) -> DepartmentIngestionService:
+    global _runtime_department_ingestion_service
+    if _runtime_department_ingestion_service is None:
+        _runtime_department_ingestion_service = DepartmentIngestionService(
+            department_repository=department_repository,
+            document_repository=document_repository,
+            rag_service=rag_service,
+            rbac_service=rbac_service,
+            settings=settings,
+        )
+    return _runtime_department_ingestion_service
 
 
 def get_audit_service() -> AuditService:

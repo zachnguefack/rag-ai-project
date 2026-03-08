@@ -99,3 +99,26 @@ class UserDocumentScopeResponse(BaseModel):
     user_id: str
     department_id: str
     authorized_document_ids: list[str] = Field(default_factory=list)
+
+
+class DepartmentDeleteResponse(BaseModel):
+    department_id: str
+    deleted_documents: int
+    deleted_files: int
+    deleted_repository: str
+
+
+class DepartmentIngestFilePathRequest(BaseModel):
+    file_path: str
+
+
+class DepartmentIngestFolderPathRequest(BaseModel):
+    folder_path: str
+
+
+class DepartmentIngestionResponse(BaseModel):
+    department_id: str
+    ingested_documents: int
+    indexed_files: int
+    indexed_chunks: int
+    storage_paths: list[str] = Field(default_factory=list)

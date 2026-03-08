@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from app.api.deps import (
     get_audit_service,
@@ -17,6 +17,10 @@ from app.database.repositories.user_repo import UserRepository
 from app.models.domain.user import User
 from app.models.schema.admin import (
     DepartmentCreateRequest,
+    DepartmentDeleteResponse,
+    DepartmentIngestFilePathRequest,
+    DepartmentIngestFolderPathRequest,
+    DepartmentIngestionResponse,
     DepartmentResponse,
     DocumentAccessGrantRequest,
     PermissionListResponse,
@@ -47,6 +51,7 @@ from app.security.policies import Permission, RoleName
 from app.security.rbac import require_permissions
 from app.services.audit_service import AuditService
 from app.services.department_service import DepartmentService
+from app.services.department_ingestion_service import DepartmentIngestionService
 from app.services.document_access_service import DocumentAccessService
 from app.api.deps import get_document_service
 from app.services.document_service import DocumentService
@@ -166,22 +171,22 @@ def validate_rbac_access(payload: RBACValidateRequest, current_user: User = Depe
     return rbac_service.validate_access(user_id=payload.user_id, permission=payload.permission, document_id=payload.document_id)
 
 
-@router.get('/departments', response_model=list[DepartmentResponse], dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
+@router.get('/departments', response_model=list[DepartmentResponse], dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Departments"])
 @require_permissions(Permission.MANAGE_USERS)
 def list_departments(current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service), department_service: DepartmentService = Depends(get_department_service)) -> list[DepartmentResponse]:
     rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
     return [DepartmentResponse(**item.model_dump()) for item in department_service.list_departments()]
 
 
-@router.post('/departments', response_model=DepartmentResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
+@router.post('/departments', response_model=DepartmentResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Departments"], summary="Create department with filesystem repository", description="Creates department and automatically creates /data/{department_name} repository folder.")
 @require_permissions(Permission.MANAGE_USERS)
 def create_department(payload: DepartmentCreateRequest, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service), department_service: DepartmentService = Depends(get_department_service)) -> DepartmentResponse:
     rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
-    item = department_service.create_department(payload.department_id, payload.name, payload.description)
+    item = department_service.create_department(payload.department_id, payload.name, payload.description, actor_user_id=current_user.user_id)
     return DepartmentResponse(**item.model_dump())
 
 
-@router.get('/departments/{department_id}', response_model=DepartmentResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
+@router.get('/departments/{department_id}', response_model=DepartmentResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Departments"])
 @require_permissions(Permission.MANAGE_USERS)
 def get_department(department_id: str, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service), department_service: DepartmentService = Depends(get_department_service)) -> DepartmentResponse:
     rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
@@ -189,12 +194,38 @@ def get_department(department_id: str, current_user: User = Depends(get_current_
     return DepartmentResponse(**item.model_dump())
 
 
-@router.get('/departments/{department_id}/documents', response_model=list[DocumentResponse], dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
+@router.get('/departments/{department_id}/documents', response_model=list[DocumentResponse], dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Departments"])
 @require_permissions(Permission.MANAGE_USERS)
 def get_department_documents(department_id: str, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service), department_service: DepartmentService = Depends(get_department_service), document_service: DocumentService = Depends(get_document_service)) -> list[DocumentResponse]:
     rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
     docs = department_service.list_documents_for_department(department_id)
     return [document_service._to_document_response(doc) for doc in docs]
+
+
+@router.delete('/departments/{department_id}', response_model=DepartmentDeleteResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Departments", "Admin"], summary="Delete department and purge repository", description="Destructive operation: deletes department documents, vector entries, physical files, and /data/{department_name} folder.")
+@require_permissions(Permission.MANAGE_USERS)
+def delete_department(department_id: str, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service), department_service: DepartmentService = Depends(get_department_service)) -> DepartmentDeleteResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    payload = department_service.delete_department(department_id, actor_user_id=current_user.user_id)
+    return DepartmentDeleteResponse(**payload)
+
+
+@router.post('/departments/{department_id}/upload', response_model=DepartmentIngestionResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Department Ingestion", "Admin"], summary="Ingest files via multipart upload", description="Accepts drag-and-drop style multipart uploads and stores files under /data/{department_name}/ before indexing.")
+@require_permissions(Permission.MANAGE_USERS)
+async def ingest_department_upload(department_id: str, files: list[UploadFile] = File(...), current_user: User = Depends(get_current_user), ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service)) -> DepartmentIngestionResponse:
+    return await ingestion_service.ingest_upload(user=current_user, department_id=department_id, files=files)
+
+
+@router.post('/departments/{department_id}/ingest-file-path', response_model=DepartmentIngestionResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Department Ingestion", "Admin"], summary="Ingest by explicit file path")
+@require_permissions(Permission.MANAGE_USERS)
+def ingest_department_file_path(department_id: str, payload: DepartmentIngestFilePathRequest, current_user: User = Depends(get_current_user), ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service)) -> DepartmentIngestionResponse:
+    return ingestion_service.ingest_file_path(user=current_user, department_id=department_id, file_path=payload.file_path)
+
+
+@router.post('/departments/{department_id}/ingest-folder-path', response_model=DepartmentIngestionResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Department Ingestion", "Admin"], summary="Ingest all supported files from a folder path", description="Scans supported file types in a folder, copies/registers files in /data/{department_name}, creates document/version metadata, and indexes content.")
+@require_permissions(Permission.MANAGE_USERS)
+def ingest_department_folder_path(department_id: str, payload: DepartmentIngestFolderPathRequest, current_user: User = Depends(get_current_user), ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service)) -> DepartmentIngestionResponse:
+    return ingestion_service.ingest_folder_path(user=current_user, department_id=department_id, folder_path=payload.folder_path)
 
 
 @router.put('/users/{user_id}/department', response_model=UserDepartmentResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])

@@ -20,3 +20,9 @@ class DepartmentRepository:
     def upsert(self, record: DepartmentRecord) -> DepartmentRecord:
         self._departments[record.department_id] = record
         return record
+
+    def delete(self, department_id: str) -> bool:
+        if department_id not in self._departments:
+            return False
+        del self._departments[department_id]
+        return True
