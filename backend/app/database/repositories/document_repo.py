@@ -21,6 +21,7 @@ class DocumentRepository:
                 updated_at=now,
                 versions=[
                     DocumentVersionRecord(
+                        version_id="doc-ops-v1",
                         version=1,
                         content="Standard operations handbook",
                         metadata=DocumentMetadata(
@@ -30,6 +31,8 @@ class DocumentRepository:
                             document_type="handbook",
                             status="active",
                         ),
+                        indexed=True,
+                        created_at=now,
                     )
                 ],
             ),
@@ -45,6 +48,7 @@ class DocumentRepository:
                 updated_at=now,
                 versions=[
                     DocumentVersionRecord(
+                        version_id="doc-eng-v1",
                         version=1,
                         content="Engineering SOP",
                         metadata=DocumentMetadata(
@@ -54,6 +58,8 @@ class DocumentRepository:
                             document_type="sop",
                             status="active",
                         ),
+                        indexed=True,
+                        created_at=now,
                     )
                 ],
             ),
@@ -69,6 +75,7 @@ class DocumentRepository:
                 updated_at=now,
                 versions=[
                     DocumentVersionRecord(
+                        version_id="doc-compliance-v1",
                         version=1,
                         content="Confidential compliance report",
                         metadata=DocumentMetadata(
@@ -78,6 +85,8 @@ class DocumentRepository:
                             document_type="report",
                             status="active",
                         ),
+                        indexed=True,
+                        created_at=now,
                     )
                 ],
             ),

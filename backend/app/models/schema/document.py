@@ -53,8 +53,13 @@ class DocumentResponse(BaseModel):
 
 
 class DocumentVersionResponse(BaseModel):
+    version_id: str = ""
     version: int
     content: str
+    storage_path: str = ""
+    checksum: str = ""
+    indexed: bool = False
+    created_at: datetime | None = None
     metadata: DocumentMetadataResponse
 
 
@@ -91,11 +96,13 @@ class DocumentSearchResponse(DocumentListResponse):
 class DocumentMetadataDetailResponse(BaseModel):
     document_id: str = Field(..., examples=["doc-ops"], description="Internal document identifier.")
     title: str
+    original_filename: str
     department_id: str
     owner: str
     classification: str
     document_type: str
     status: str
+    storage_path: str
     created_at: datetime
     updated_at: datetime
     current_version: int

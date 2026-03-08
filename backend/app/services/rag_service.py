@@ -75,3 +75,12 @@ class RAGApplicationService:
         response = self._rag_service.answer(question=question, policy=policy, metadata_filter=metadata_filter)
         response["citations"] = [str(citation) for citation in response.get("citations", [])]
         return response
+
+
+    def remove_document_sources(self, sources: list[str]) -> None:
+        with self._lock:
+            current_state = self._state_store.load()
+            for source in sources:
+                self._vector_store.delete_by_source(source)
+                current_state.files.pop(source, None)
+            self._state_store.save(current_state)

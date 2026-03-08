@@ -65,7 +65,7 @@ class DocumentService:
             status=request.metadata.status,
             created_at=now,
             updated_at=now,
-            versions=[DocumentVersionRecord(version=1, content=request.content, metadata=metadata)],
+            versions=[DocumentVersionRecord(version_id=f"{request.document_id}-v1", version=1, content=request.content, metadata=metadata)],
         )
         self._documents.upsert(record)
         return self._to_document_response(record)
@@ -86,7 +86,7 @@ class DocumentService:
         record.status = request.metadata.status
         record.owner = request.metadata.owner
         record.updated_at = datetime.now(timezone.utc)
-        record.versions.append(DocumentVersionRecord(version=next_version, content=request.content, metadata=metadata))
+        record.versions.append(DocumentVersionRecord(version_id=f"{document_id}-v{next_version}", version=next_version, content=request.content, metadata=metadata))
         self._documents.upsert(record)
         return self._to_document_response(record)
 
@@ -114,7 +114,7 @@ class DocumentService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document does not exist.")
 
         return [
-            DocumentVersionResponse(version=version.version, content=version.content, metadata=self._to_metadata_response(version.metadata))
+            DocumentVersionResponse(version_id=version.version_id, version=version.version, content=version.content, storage_path=version.storage_path, checksum=version.checksum, indexed=version.indexed, created_at=version.created_at, metadata=self._to_metadata_response(version.metadata))
             for version in record.versions
         ]
 
@@ -316,6 +316,7 @@ class DocumentService:
         return DocumentSummaryResponse(
             document_id=record.document_id,
             title=record.title,
+            original_filename=record.original_filename,
             department_id=record.department_id,
             owner=record.owner,
             classification=record.classification,
@@ -330,11 +331,13 @@ class DocumentService:
         return DocumentMetadataDetailResponse(
             document_id=record.document_id,
             title=record.title,
+            original_filename=record.original_filename,
             department_id=record.department_id,
             owner=record.owner,
             classification=record.classification,
             document_type=record.document_type,
             status=record.status,
+            storage_path=record.storage_path,
             created_at=record.created_at,
             updated_at=record.updated_at,
             current_version=record.current_version,
