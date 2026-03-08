@@ -31,6 +31,9 @@ class BackendSettings:
     service_port: int = int(os.getenv("RAG_SERVICE_PORT", "8000"))
 
     data_dir: Path = DEFAULT_CONFIG.data_dir
+    # Optional allowlist for server-side filesystem ingestion endpoints.
+    # Multiple roots can be provided using the OS path separator (':' on Linux/macOS, ';' on Windows).
+    ingest_allowed_roots: str = os.getenv("RAG_INGEST_ALLOWED_ROOTS", "")
     vector_store_dir: Path = DEFAULT_CONFIG.vector_store_dir
     embedding_cache_path: Path = DEFAULT_CONFIG.embedding_cache_path
     collection_name: str = DEFAULT_CONFIG.collection_name

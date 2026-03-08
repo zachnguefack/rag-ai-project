@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,11 +36,27 @@ class DepartmentIngestionService:
         self._rbac = rbac_service
         self._settings = settings or load_settings()
         self._supported = {".pdf", ".txt", ".csv", ".docx", ".xlsx", ".json"}
+        self._allowed_roots = self._build_allowed_roots()
 
     def _enforce_admin(self, user: User) -> None:
         if self._rbac is not None:
             self._rbac.enforce_permission(user, Permission.INGEST_DOCUMENT)
             self._rbac.enforce_permission(user, Permission.MANAGE_USERS)
+
+
+    def _build_allowed_roots(self) -> tuple[Path, ...]:
+        configured = [item.strip() for item in self._settings.ingest_allowed_roots.split(os.pathsep) if item.strip()]
+        roots = [Path(item).expanduser().resolve() for item in configured]
+        if not roots:
+            roots = [
+                self._settings.data_dir.resolve(),
+                Path.cwd().resolve(),
+                Path('/tmp').resolve(),
+            ]
+        return tuple(dict.fromkeys(roots))
+
+    def _allowed_roots_error(self) -> str:
+        return f"Provided path is outside allowed ingest roots: {', '.join(str(root) for root in self._allowed_roots)}"
 
     def _department_dir(self, department_id: str) -> tuple[str, Path]:
         dept = self._departments.get(department_id)
@@ -50,10 +67,9 @@ class DepartmentIngestionService:
         return dept.name, target
 
     def _validate_allowed_path(self, path: Path) -> Path:
-        candidate = path.expanduser().resolve()
-        allowed_roots = [self._settings.data_dir.resolve(), Path.cwd().resolve(), Path('/tmp').resolve()]
-        if not any(str(candidate).startswith(str(root)) for root in allowed_roots):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provided path is outside allowed ingest roots.")
+        candidate = path.expanduser().resolve(strict=False)
+        if not any(candidate == root or root in candidate.parents for root in self._allowed_roots):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=self._allowed_roots_error())
         return candidate
 
     def _checksum(self, path: Path) -> str:
@@ -139,8 +155,10 @@ class DepartmentIngestionService:
     def ingest_file_path(self, *, user: User, department_id: str, file_path: str) -> DepartmentIngestionResponse:
         self._enforce_admin(user)
         source = self._validate_allowed_path(Path(file_path))
-        if not source.exists() or not source.is_file():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source file was not found.")
+        if not source.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Source file was not found: {source}")
+        if not source.is_file():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Provided path is not a file: {source}")
         if source.suffix.lower() not in self._supported:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type.")
         _, dept_dir = self._department_dir(department_id)
@@ -153,8 +171,10 @@ class DepartmentIngestionService:
     def ingest_folder_path(self, *, user: User, department_id: str, folder_path: str) -> DepartmentIngestionResponse:
         self._enforce_admin(user)
         source_folder = self._validate_allowed_path(Path(folder_path))
-        if not source_folder.exists() or not source_folder.is_dir():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source folder was not found.")
+        if not source_folder.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Source folder was not found: {source_folder}")
+        if not source_folder.is_dir():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Provided path is not a folder: {source_folder}")
         _, dept_dir = self._department_dir(department_id)
         docs: list[DocumentRecord] = []
         for path in sorted(source_folder.glob("**/*")):
@@ -164,4 +184,7 @@ class DepartmentIngestionService:
             if path.resolve() != target.resolve():
                 shutil.copy2(path, target)
             docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=path, storage_path=target))
+        if not docs:
+            supported = ", ".join(sorted(self._supported))
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"No supported files found in folder. Supported extensions: {supported}")
         return self._index_and_finalize(docs, department_id)

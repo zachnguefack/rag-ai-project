@@ -109,11 +109,21 @@ class DepartmentDeleteResponse(BaseModel):
 
 
 class DepartmentIngestFilePathRequest(BaseModel):
-    file_path: str
+    file_path: str = Field(
+        ...,
+        min_length=1,
+        examples=["/data/imports/report.pdf"],
+        description="Absolute or server-local path to an existing file on server disk.",
+    )
 
 
 class DepartmentIngestFolderPathRequest(BaseModel):
-    folder_path: str
+    folder_path: str = Field(
+        ...,
+        min_length=1,
+        examples=["/data/imports/monthly"],
+        description="Absolute or server-local path to an existing folder on server disk.",
+    )
 
 
 class DepartmentIngestionResponse(BaseModel):
