@@ -10,12 +10,12 @@ from uuid import uuid4
 from fastapi import HTTPException, UploadFile, status
 
 from app.config.settings import BackendSettings, load_settings
-from app.database.repositories.department_repo import DepartmentRepository
 from app.database.repositories.document_repo import DocumentRepository
 from app.models.domain.user import User
 from app.models.persistence.document import DocumentMetadata, DocumentRecord, DocumentVersionRecord
-from app.models.schema.admin import DepartmentIngestionResponse
+from app.models.schema.admin import DepartmentIngestionResponse, DepartmentUploadResultResponse
 from app.security.policies import Permission
+from app.services.department_service import DepartmentService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
 
@@ -24,13 +24,13 @@ class DepartmentIngestionService:
     def __init__(
         self,
         *,
-        department_repository: DepartmentRepository | None = None,
+        department_service: DepartmentService | None = None,
         document_repository: DocumentRepository | None = None,
         rag_service: RAGApplicationService | None = None,
         rbac_service: RBACService | None = None,
         settings: BackendSettings | None = None,
     ) -> None:
-        self._departments = department_repository or DepartmentRepository()
+        self._department_service = department_service or DepartmentService(settings=settings)
         self._documents = document_repository or DocumentRepository()
         self._rag_service = rag_service
         self._rbac = rbac_service
@@ -59,10 +59,8 @@ class DepartmentIngestionService:
         return f"Provided path is outside allowed ingest roots: {', '.join(str(root) for root in self._allowed_roots)}"
 
     def _department_dir(self, department_id: str) -> tuple[str, Path]:
-        dept = self._departments.get(department_id)
-        if dept is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found.")
-        target = (self._settings.data_dir / dept.name).resolve()
+        dept = self._department_service.get_department(department_id)
+        target = dept.path.resolve()
         target.mkdir(parents=True, exist_ok=True)
         return dept.name, target
 
@@ -152,7 +150,7 @@ class DepartmentIngestionService:
             storage_paths=[doc.storage_path for doc in docs if doc.storage_path],
         )
 
-    async def ingest_upload(self, *, user: User, department_id: str, files: list[UploadFile]) -> DepartmentIngestionResponse:
+    async def ingest_upload(self, *, user: User, department_id: str, files: list[UploadFile]) -> DepartmentUploadResultResponse:
         self._enforce_admin(user)
         self._validate_upload_files(files)
         _, dept_dir = self._department_dir(department_id)
@@ -185,7 +183,8 @@ class DepartmentIngestionService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid files were uploaded.")
 
         try:
-            return self._index_and_finalize(docs, department_id)
+            result = self._index_and_finalize(docs, department_id)
+            return DepartmentUploadResultResponse(**result.model_dump(), uploaded_files=self._department_service.list_department_files(department_id))
         except Exception as exc:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ingestion pipeline failed: {exc}") from exc
 

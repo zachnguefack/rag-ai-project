@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 from fastapi import HTTPException, UploadFile
-from uuid import uuid4
 
 from app.config.settings import BackendSettings
 from app.database.repositories.department_repo import DepartmentRepository
@@ -38,32 +37,31 @@ def _admin_user() -> User:
 
 
 def test_department_creation_creates_repository_folder(tmp_path: Path) -> None:
-    settings = BackendSettings(data_dir=tmp_path)
+    settings = BackendSettings(data_dir=tmp_path, data_departments_root=tmp_path / "depart")
     service = DepartmentService(settings=settings)
-    dept_id = f"dept-{uuid4().hex[:8]}"
 
-    service.create_department(dept_id, "QA", "Quality", actor_user_id="u-admin")
+    service.create_department(None, "QA", "Quality", actor_user_id="u-admin")
 
-    assert (tmp_path / "QA").is_dir()
+    assert (tmp_path / "depart" / "qa").is_dir()
 
 
 def test_department_deletion_removes_docs_files_and_vectors(tmp_path: Path) -> None:
-    settings = BackendSettings(data_dir=tmp_path)
+    settings = BackendSettings(data_dir=tmp_path, data_departments_root=tmp_path / "depart")
     rag = FakeRAGService()
     depts = DepartmentRepository()
     docs = DocumentRepository()
     access = UserDocumentAccessRepository()
     service = DepartmentService(department_repository=depts, document_repository=docs, user_document_access_repository=access, settings=settings, rag_service=rag)
-    dept_id = f"dept-{uuid4().hex[:8]}"
 
-    created = service.create_department(dept_id, "QA", "Quality", actor_user_id="u-admin")
-    assert created.department_id == dept_id
-    storage = tmp_path / "QA" / "qa.txt"
+    created = service.create_department(None, "QA", "Quality", actor_user_id="u-admin")
+    dept_id = created.department_id
+    assert created.department_id == "qa"
+    storage = tmp_path / "depart" / "qa" / "qa.txt"
     storage.write_text("qa content", encoding="utf-8")
     admin = _admin_user()
 
     ingest = DepartmentIngestionService(
-        department_repository=depts,
+        department_service=service,
         document_repository=docs,
         rag_service=rag,
         rbac_service=RBACService(document_repository=docs),
@@ -74,20 +72,20 @@ def test_department_deletion_removes_docs_files_and_vectors(tmp_path: Path) -> N
     result = service.delete_department(dept_id, actor_user_id="u-admin")
 
     assert result["deleted_documents"] >= 1
-    assert not (tmp_path / "QA").exists()
+    assert not (tmp_path / "depart" / "qa").exists()
     assert rag.removed
 
 
 def test_upload_rejects_unsupported_extension(tmp_path: Path) -> None:
-    settings = BackendSettings(data_dir=tmp_path)
+    settings = BackendSettings(data_dir=tmp_path, data_departments_root=tmp_path / "depart")
     depts = DepartmentRepository()
     docs = DocumentRepository()
     service = DepartmentService(department_repository=depts, document_repository=docs, settings=settings)
-    dept_id = f"dept-{uuid4().hex[:8]}"
-    service.create_department(dept_id, "QA", "Quality", actor_user_id="u-admin")
+    created = service.create_department(None, "QA", "Quality", actor_user_id="u-admin")
+    dept_id = created.department_id
 
     ingest = DepartmentIngestionService(
-        department_repository=depts,
+        department_service=service,
         document_repository=docs,
         settings=settings,
         rbac_service=RBACService(document_repository=docs),
@@ -107,15 +105,15 @@ def test_upload_rejects_unsupported_extension(tmp_path: Path) -> None:
 
 
 def test_upload_rejects_file_larger_than_configured_limit(tmp_path: Path) -> None:
-    settings = BackendSettings(data_dir=tmp_path, max_upload_file_size_bytes=4)
+    settings = BackendSettings(data_dir=tmp_path, data_departments_root=tmp_path / "depart", max_upload_file_size_bytes=4)
     depts = DepartmentRepository()
     docs = DocumentRepository()
     service = DepartmentService(department_repository=depts, document_repository=docs, settings=settings)
-    dept_id = f"dept-{uuid4().hex[:8]}"
-    service.create_department(dept_id, "QA", "Quality", actor_user_id="u-admin")
+    created = service.create_department(None, "QA", "Quality", actor_user_id="u-admin")
+    dept_id = created.department_id
 
     ingest = DepartmentIngestionService(
-        department_repository=depts,
+        department_service=service,
         document_repository=docs,
         settings=settings,
         rbac_service=RBACService(document_repository=docs),
