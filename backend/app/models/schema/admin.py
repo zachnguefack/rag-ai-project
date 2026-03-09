@@ -61,15 +61,46 @@ class RBACValidateResponse(BaseModel):
 
 
 class DepartmentCreateRequest(BaseModel):
-    department_id: str = Field(..., examples=["dept-finance"])
     name: str = Field(..., examples=["Finance"])
     description: str = Field(default="", examples=["Finance and accounting department"])
 
 
-class DepartmentResponse(BaseModel):
+class DepartmentSummaryResponse(BaseModel):
     department_id: str
     name: str
-    description: str
+    path: str
+    file_count: int
+    description: str = ""
+
+
+class DepartmentDetailResponse(DepartmentSummaryResponse):
+    files: list["DepartmentFileSummaryResponse"] = Field(default_factory=list)
+
+
+class DepartmentResponse(DepartmentSummaryResponse):
+    pass
+
+
+class DepartmentFileSummaryResponse(BaseModel):
+    name: str
+    path: str
+    size_bytes: int
+    content_type: str | None = None
+    last_modified: datetime
+
+
+class DepartmentFileListResponse(BaseModel):
+    department_id: str
+    files: list[DepartmentFileSummaryResponse] = Field(default_factory=list)
+
+
+class DepartmentUploadResultResponse(BaseModel):
+    department_id: str
+    ingested_documents: int
+    indexed_files: int
+    indexed_chunks: int
+    storage_paths: list[str] = Field(default_factory=list)
+    uploaded_files: list[DepartmentFileSummaryResponse] = Field(default_factory=list)
 
 
 class UserDepartmentUpdateRequest(BaseModel):

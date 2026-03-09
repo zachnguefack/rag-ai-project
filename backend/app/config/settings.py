@@ -31,6 +31,7 @@ class BackendSettings:
     service_port: int = int(os.getenv("RAG_SERVICE_PORT", "8000"))
 
     data_dir: Path = DEFAULT_CONFIG.data_dir
+    data_departments_root: Path = Path(os.getenv("DATA_DEPARTMENTS_ROOT", "/data/depart"))
     # Optional allowlist for server-side filesystem ingestion endpoints.
     # Multiple roots can be provided using the OS path separator (':' on Linux/macOS, ';' on Windows).
     ingest_allowed_roots: str = os.getenv("RAG_INGEST_ALLOWED_ROOTS", "")
@@ -60,4 +61,7 @@ class BackendSettings:
 
 
 def load_settings() -> BackendSettings:
-    return BackendSettings()
+    settings = BackendSettings()
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.data_departments_root.mkdir(parents=True, exist_ok=True)
+    return settings

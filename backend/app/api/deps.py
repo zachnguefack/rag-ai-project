@@ -175,7 +175,7 @@ def get_department_service(
     global _runtime_department_service
     if _runtime_department_service is None:
         _runtime_department_service = DepartmentService(
-            department_repository=department_repository,
+            department_service=department_service,
             document_repository=document_repository,
             user_document_access_repository=user_document_access_repository,
             settings=settings,
@@ -185,7 +185,7 @@ def get_department_service(
 
 
 def get_department_ingestion_service(
-    department_repository: DepartmentRepository = Depends(get_department_repository),
+    department_service: DepartmentService = Depends(get_department_service),
     document_repository: DocumentRepository = Depends(get_document_repository),
     rag_service: RAGApplicationService = Depends(get_rag_service),
     rbac_service: RBACService = Depends(get_rbac_service),
@@ -194,7 +194,7 @@ def get_department_ingestion_service(
     global _runtime_department_ingestion_service
     if _runtime_department_ingestion_service is None:
         _runtime_department_ingestion_service = DepartmentIngestionService(
-            department_repository=department_repository,
+            department_service=department_service,
             document_repository=document_repository,
             rag_service=rag_service,
             rbac_service=rbac_service,
