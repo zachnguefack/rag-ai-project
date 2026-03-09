@@ -7,6 +7,7 @@ from app.config.settings import BackendSettings, load_settings
 from app.database.repositories.department_repo import DepartmentRepository
 from app.database.repositories.document_repo import DocumentRepository
 from app.database.repositories.ingest_job_repo import IngestJobRepository
+from app.database.repositories.user_department_access_repo import UserDepartmentAccessRepository
 from app.database.repositories.user_document_access_repo import UserDocumentAccessRepository
 from app.database.repositories.user_repo import UserRepository
 from app.database.sqlite import SQLiteStore
@@ -33,6 +34,7 @@ _runtime_document_repo: DocumentRepository | None = None
 _runtime_department_repo: DepartmentRepository | None = None
 _runtime_user_repo: UserRepository | None = None
 _runtime_user_document_access_repo: UserDocumentAccessRepository | None = None
+_runtime_user_department_access_repo: UserDepartmentAccessRepository | None = None
 _runtime_scope_builder: ScopeBuilderService | None = None
 _runtime_document_access_service: DocumentAccessService | None = None
 _runtime_department_service: DepartmentService | None = None
@@ -91,13 +93,21 @@ def get_user_document_access_repository() -> UserDocumentAccessRepository:
     return _runtime_user_document_access_repo
 
 
+def get_user_department_access_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> UserDepartmentAccessRepository:
+    global _runtime_user_department_access_repo
+    if _runtime_user_department_access_repo is None:
+        _runtime_user_department_access_repo = UserDepartmentAccessRepository(store)
+    return _runtime_user_department_access_repo
+
+
 def get_scope_builder_service(
     document_repository: DocumentRepository = Depends(get_document_repository),
     user_document_access_repository: UserDocumentAccessRepository = Depends(get_user_document_access_repository),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
 ) -> ScopeBuilderService:
     global _runtime_scope_builder
     if _runtime_scope_builder is None:
-        _runtime_scope_builder = ScopeBuilderService(document_repository, user_document_access_repository)
+        _runtime_scope_builder = ScopeBuilderService(document_repository, user_document_access_repository, user_department_access_repository)
     return _runtime_scope_builder
 
 
@@ -136,6 +146,7 @@ def get_rbac_service(
     document_repository: DocumentRepository = Depends(get_document_repository),
     user_repository: UserRepository = Depends(get_user_repository),
     user_document_access_repository: UserDocumentAccessRepository = Depends(get_user_document_access_repository),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
 ) -> RBACService:
     global _runtime_rbac
     if _runtime_rbac is None:
@@ -143,6 +154,7 @@ def get_rbac_service(
             document_repository=document_repository,
             user_repository=user_repository,
             user_document_access_repository=user_document_access_repository,
+            user_department_access_repository=user_department_access_repository,
         )
     return _runtime_rbac
 

@@ -28,7 +28,7 @@ class DocumentAccessService:
         self._rbac = rbac_service or RBACService(document_repository=self._documents)
 
     def compute_authorized_document_ids(self, user: User) -> list[str]:
-        return self._scope_builder.build_authorized_scope(user_id=user.user_id, department_id=user.department_id)
+        return self._scope_builder.build_authorized_scope(user_id=user.user_id, department_ids=list(user.effective_department_ids))
 
     def can_access_document(self, user: User, document_id: str) -> bool:
         if self._rbac.validate_permission(user, Permission.READ_DOCUMENT).granted is False:

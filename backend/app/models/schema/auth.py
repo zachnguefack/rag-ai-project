@@ -34,6 +34,7 @@ class MeResponse(BaseModel):
     email: EmailStr = Field(..., examples=["jane.doe@company.com"])
     is_active: bool = Field(..., examples=[True])
     department_id: str = Field(..., examples=["dept-operations"])
+    department_ids: list[str] = Field(default_factory=list, examples=[["dept-operations", "dept-it"]])
     roles: list[RoleName]
 
 

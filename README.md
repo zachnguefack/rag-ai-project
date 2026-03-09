@@ -155,49 +155,39 @@ The FastAPI backend exposes admin RBAC APIs under `/api/v1/admin` in the **Roles
 
 Detailed usage and examples are documented in `docs/rbac_backend.md`.
 
-## Department-based secure document access (new)
+## Department-based secure document access (updated)
 
-The backend now uses a simpler, maintainable secure access model for enterprise RAG:
+The backend now enforces a department-aware access model with explicit grants:
 
-- Each user has one **primary department**.
-- Each document has one **primary department**.
-- Users can access documents in their own department by default.
-- Admins can grant additional per-user document access.
-- Admins can revoke those grants.
+- Users can be assigned to **multiple departments** (admin-managed).
+- A user can retrieve documents from:
+  1) all assigned departments, and
+  2) documents explicitly granted to the user.
+- Explicit revocation of per-document grants is supported.
 
-Effective retrieval scope is computed before retrieval as:
+Effective retrieval scope is computed in backend services **before** retrieval:
 
-`authorized_document_ids = department_documents + explicit_grants - revoked_grants`
+`authorized_document_ids = docs_in_assigned_departments UNION explicit_grants MINUS revoked_grants`
 
-Security guarantees:
-
-1. Deny-by-default.
-2. Scope computed before vector/keyword retrieval.
-3. Unauthorized chunks are excluded from retrieval and post-filtered.
-4. Strict document scope remains supported.
+This scope is converted to a metadata filter and passed into retrieval, so unauthorized docs are never sent into the RAG pipeline.
 
 ### Admin APIs for access operations
 
 All under `/api/v1/admin`:
 
-- `GET /departments`
-- `POST /departments`
-- `GET /departments/{department_id}`
-- `GET /departments/{department_id}/documents`
-- `PUT /users/{user_id}/department`
+- `POST /users/{user_id}/departments/{department_id}`
+- `DELETE /users/{user_id}/departments/{department_id}`
+- `GET /users/{user_id}/departments`
+- `GET /departments/{department_id}/users`
 - `POST /users/{user_id}/document-access`
 - `GET /users/{user_id}/document-access`
 - `DELETE /users/{user_id}/document-access/{document_id}`
 - `GET /users/{user_id}/document-scope`
 
-### Swagger validation steps
+### Security notes
 
-1. Login as an admin (`sysadmin` or `admin`) in `/docs`.
-2. Assign a user department using `PUT /api/v1/admin/users/{user_id}/department`.
-3. Check baseline scope with `GET /api/v1/admin/users/{user_id}/document-scope`.
-4. Grant out-of-department doc access and re-check scope.
-5. Revoke grant and verify document disappears from scope.
-
-`document_id` is always an internal identifier, never a filesystem path.
+- Access filtering is backend-enforced (not frontend-only).
+- Admin assignment endpoints require `MANAGE_USERS` permission.
+- Retrieval also strips unauthorized citations as defense in depth.
 
 - [Enterprise RAG persistence refactor](docs/enterprise_rag_persistence_refactor.md)

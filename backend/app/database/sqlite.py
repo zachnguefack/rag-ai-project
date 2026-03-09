@@ -87,6 +87,18 @@ class SQLiteStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_department_access (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    department_id TEXT NOT NULL,
+                    assigned_by TEXT NOT NULL,
+                    assigned_at TEXT NOT NULL,
+                    UNIQUE(user_id, department_id)
+                )
+                """
+            )
 
 
 def dumps_json(value: object) -> str:

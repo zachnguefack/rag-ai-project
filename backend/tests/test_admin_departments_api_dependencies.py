@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
 from app.api import deps
@@ -10,12 +11,14 @@ from app.api.v1.router import build_v1_router
 from app.config.settings import BackendSettings
 from app.models.domain.role import Role
 from app.models.domain.user import User
+from app.models.persistence.user import UserRecord
 from app.security.policies import Permission, RoleName
 
 
 class _PermissiveRBAC:
-    def enforce_permission(self, user: User, permission: Permission) -> None:  # pragma: no cover - trivial stub
-        _ = (user, permission)
+    def enforce_permission(self, user: User, permission: Permission) -> None:
+        if permission not in user.permissions:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No assigned role grants this permission.")
 
 
 def _admin_user() -> User:
@@ -30,6 +33,8 @@ def _build_client(tmp_path: Path) -> TestClient:
     deps._runtime_department_repo = None
     deps._runtime_document_repo = None
     deps._runtime_user_document_access_repo = None
+    deps._runtime_user_department_access_repo = None
+    deps._runtime_user_repo = None
     deps._runtime_service = None
     deps._runtime_sqlite_store = None
 
@@ -41,6 +46,17 @@ def _build_client(tmp_path: Path) -> TestClient:
     app.dependency_overrides[deps.get_current_user] = _admin_user
     app.dependency_overrides[deps.get_rbac_service] = _PermissiveRBAC
     app.dependency_overrides[deps.get_rag_service] = lambda: None
+
+    user_repo = deps.get_user_repository()
+    user_repo._records["u-target"] = UserRecord(
+        user_id="u-target",
+        username="john",
+        email="john@example.com",
+        password_hash="hashed",
+        roles=[RoleName.STANDARD_USER],
+        department_id="dept-general",
+        department_ids=["dept-general"],
+    )
 
     return TestClient(app)
 
@@ -119,3 +135,33 @@ def test_department_documents_openapi_uses_listing_item_schema() -> None:
     items_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]["items"]
 
     assert items_schema["$ref"].endswith("/DepartmentDocumentListItemResponse")
+
+
+def test_user_department_assignment_endpoints_and_openapi(tmp_path: Path) -> None:
+    client = _build_client(tmp_path)
+    assert client.post("/api/v1/admin/departments", json={"name": "IT", "description": "IT docs"}).status_code == 200
+
+    assign = client.post("/api/v1/admin/users/u-target/departments/it")
+    assert assign.status_code == 200
+    assert assign.json()["department_id"] == "it"
+
+    list_user = client.get("/api/v1/admin/users/u-target/departments")
+    assert list_user.status_code == 200
+    assert any(item["department_id"] == "it" for item in list_user.json())
+
+    list_department = client.get("/api/v1/admin/departments/it/users")
+    assert list_department.status_code == 200
+    assert any(item["user_id"] == "u-target" for item in list_department.json())
+
+    remove = client.delete("/api/v1/admin/users/u-target/departments/it")
+    assert remove.status_code == 200
+
+
+def test_user_department_assignment_requires_manage_users_permission(tmp_path: Path) -> None:
+    client = _build_client(tmp_path)
+    role = Role(name=RoleName.STANDARD_USER, permissions=frozenset({Permission.READ_DOCUMENT}))
+    client.app.dependency_overrides[deps.get_current_user] = lambda: User(
+        user_id="u-basic", username="basic", email="basic@example.com", department_id="dept-general", roles=(role,)
+    )
+
+    assert client.post("/api/v1/admin/departments", json={"name": "HR", "description": "HR docs"}).status_code == 403

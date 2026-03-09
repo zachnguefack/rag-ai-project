@@ -12,11 +12,13 @@ from app.api.deps import (
     get_department_ingestion_service,
     get_department_service,
     get_document_access_service,
+    get_user_department_access_repository,
     get_rbac_service,
     get_user_repository,
     validate_api_key,
 )
 from app.database.repositories.user_repo import UserRepository
+from app.database.repositories.user_department_access_repo import UserDepartmentAccessRepository
 from app.models.domain.user import User
 from app.models.schema.admin import (
     DepartmentCreateRequest,
@@ -38,6 +40,7 @@ from app.models.schema.admin import (
     RoleSummaryResponse,
     UserDepartmentResponse,
     UserDepartmentUpdateRequest,
+    UserDepartmentAccessResponse,
     UserDocumentAccessResponse,
     UserDocumentScopeResponse,
     UserRoleListResponse,
@@ -309,6 +312,75 @@ def set_user_department(user_id: str, payload: UserDepartmentUpdateRequest, curr
     return UserDepartmentResponse(user_id=user_id, department_id=record.department_id)
 
 
+@router.post('/users/{user_id}/departments/{department_id}', response_model=UserDepartmentAccessResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
+@require_permissions(Permission.MANAGE_USERS)
+def assign_user_department(
+    user_id: str,
+    department_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_repository: UserRepository = Depends(get_user_repository),
+    department_service: DepartmentService = Depends(get_department_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> UserDepartmentAccessResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    if user_repository.get(user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found.')
+    department = department_service.get_department(department_id)
+    access = user_department_access_repository.assign(user_id=user_id, department_id=department.department_id, assigned_by=current_user.user_id)
+    return UserDepartmentAccessResponse(**access.model_dump())
+
+
+@router.delete('/users/{user_id}/departments/{department_id}', response_model=UserDepartmentResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
+@require_permissions(Permission.MANAGE_USERS)
+def remove_user_department(
+    user_id: str,
+    department_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_repository: UserRepository = Depends(get_user_repository),
+    department_service: DepartmentService = Depends(get_department_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> UserDepartmentResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    if user_repository.get(user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found.')
+    department = department_service.get_department(department_id)
+    removed = user_department_access_repository.remove(user_id=user_id, department_id=department.department_id)
+    if not removed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User-department assignment not found.')
+    return UserDepartmentResponse(user_id=user_id, department_id=department.department_id)
+
+
+@router.get('/users/{user_id}/departments', response_model=list[UserDepartmentAccessResponse], dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
+@require_permissions(Permission.MANAGE_USERS)
+def list_user_departments(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_repository: UserRepository = Depends(get_user_repository),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> list[UserDepartmentAccessResponse]:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    if user_repository.get(user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found.')
+    return [UserDepartmentAccessResponse(**record.model_dump()) for record in user_department_access_repository.list_departments_for_user(user_id)]
+
+
+@router.get('/departments/{department_id}/users', response_model=list[UserDepartmentAccessResponse], dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
+@require_permissions(Permission.MANAGE_USERS)
+def list_department_users(
+    department_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    department_service: DepartmentService = Depends(get_department_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> list[UserDepartmentAccessResponse]:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    department = department_service.get_department(department_id)
+    return [UserDepartmentAccessResponse(**record.model_dump()) for record in user_department_access_repository.list_users_for_department(department.department_id)]
+
+
 @router.post('/users/{user_id}/document-access', response_model=UserDocumentAccessResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"])
 @require_permissions(Permission.MANAGE_USERS)
 def grant_user_document_access(user_id: str, payload: DocumentAccessGrantRequest, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service), user_repository: UserRepository = Depends(get_user_repository), document_access_service: DocumentAccessService = Depends(get_document_access_service)) -> UserDocumentAccessResponse:
@@ -347,7 +419,7 @@ def get_user_document_scope(user_id: str, current_user: User = Depends(get_curre
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found.')
     user = rbac_service.resolve_user(user_id)
     scope = document_access_service.compute_authorized_document_ids(user)
-    return UserDocumentScopeResponse(user_id=user.user_id, department_id=user.department_id, authorized_document_ids=scope)
+    return UserDocumentScopeResponse(user_id=user.user_id, department_id=user.department_id, department_ids=list(user.effective_department_ids), authorized_document_ids=scope)
 
 
 @router.get('/documents', response_model=AdminDocumentListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin"], summary="List all documents (admin)", description="Global document list for administrators. Not scope-limited.")

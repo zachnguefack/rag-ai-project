@@ -27,6 +27,7 @@ def get_me(current_user: User = Depends(get_current_user)) -> MeResponse:
         email=current_user.email,
         is_active=current_user.is_active,
         department_id=current_user.department_id,
+        department_ids=list(current_user.effective_department_ids),
         roles=sorted(current_user.role_names, key=lambda role: role.value),
     )
 
