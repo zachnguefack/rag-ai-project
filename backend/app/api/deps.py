@@ -175,7 +175,7 @@ def get_department_service(
     global _runtime_department_service
     if _runtime_department_service is None:
         _runtime_department_service = DepartmentService(
-            department_service=department_service,
+            department_repository=department_repository,
             document_repository=document_repository,
             user_document_access_repository=user_document_access_repository,
             settings=settings,
