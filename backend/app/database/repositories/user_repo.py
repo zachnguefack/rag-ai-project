@@ -39,6 +39,7 @@ class UserRepository:
         if record is None:
             return None
         record.department_id = department_id
+        record.department_ids = [department_id]
         return record
 
     def create(
@@ -57,6 +58,7 @@ class UserRepository:
             password_hash=password_hash,
             roles=roles,
             department_id=department_id,
+            department_ids=[department_id],
         )
         self._records[user_id] = record
         return record
@@ -67,6 +69,7 @@ class UserRepository:
             username=record.username,
             email=str(record.email),
             department_id=record.department_id,
+            department_ids=tuple(record.department_ids or [record.department_id]),
             is_active=record.is_active,
             roles=roles,
             document_allow_list=frozenset(record.document_allow_list),

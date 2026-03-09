@@ -12,9 +12,16 @@ class User:
     username: str
     email: str
     department_id: str
+    department_ids: tuple[str, ...] = field(default_factory=tuple)
     is_active: bool = True
     roles: tuple[Role, ...] = field(default_factory=tuple)
     document_allow_list: frozenset[str] = field(default_factory=frozenset)
+
+    @property
+    def effective_department_ids(self) -> tuple[str, ...]:
+        if self.department_ids:
+            return self.department_ids
+        return (self.department_id,)
 
     @property
     def role_names(self) -> frozenset[RoleName]:

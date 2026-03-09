@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException, status
 
 from app.database.repositories.document_repo import DocumentRepository
+from app.database.repositories.user_department_access_repo import UserDepartmentAccessRepository
 from app.database.repositories.role_repo import RoleRepository
 from app.database.repositories.user_document_access_repo import UserDocumentAccessRepository
 from app.database.repositories.user_repo import UserRepository
@@ -21,12 +22,14 @@ class RBACService:
         role_repository: RoleRepository | None = None,
         document_repository: DocumentRepository | None = None,
         user_document_access_repository: UserDocumentAccessRepository | None = None,
+        user_department_access_repository: UserDepartmentAccessRepository | None = None,
     ) -> None:
         self._users = user_repository or UserRepository()
         self._roles = role_repository or RoleRepository()
         self._documents = document_repository or DocumentRepository()
         self._access = user_document_access_repository or UserDocumentAccessRepository()
-        self._scope_builder = ScopeBuilderService(self._documents, self._access)
+        self._department_access = user_department_access_repository or UserDepartmentAccessRepository()
+        self._scope_builder = ScopeBuilderService(self._documents, self._access, self._department_access)
 
     def resolve_user(self, user_id: str) -> User:
         record = self._users.get(user_id)
@@ -35,6 +38,9 @@ class RBACService:
 
         roles = tuple(self._roles.get(role_name) for role_name in record.roles)
         user = self._users.hydrate(record, roles)
+        assigned_departments = [entry.department_id for entry in self._department_access.list_departments_for_user(user_id)]
+        if assigned_departments:
+            user.department_ids = tuple(sorted(set([user.department_id, *assigned_departments])))
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled.")
         return user
@@ -111,7 +117,7 @@ class RBACService:
         if document is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document does not exist.")
 
-        authorized_ids = set(self._scope_builder.build_authorized_scope(user_id=user.user_id, department_id=user.department_id))
+        authorized_ids = set(self._scope_builder.build_authorized_scope(user_id=user.user_id, department_ids=list(user.effective_department_ids)))
         if document_id not in authorized_ids:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

@@ -5,6 +5,7 @@ from app.database.repositories.document_repo import DocumentRepository
 from app.database.repositories.user_document_access_repo import UserDocumentAccessRepository
 from app.models.domain.role import Role
 from app.models.domain.user import User
+from app.models.persistence.document import DocumentMetadata, DocumentRecord, DocumentVersionRecord
 from app.security.policies import Permission, RoleName
 from app.services.audit_service import AuditService
 from app.services.document_access_service import DocumentAccessService
@@ -19,6 +20,54 @@ ADMIN_ROLE = Role(name=RoleName.SYSTEM_ADMINISTRATOR, permissions=frozenset({Per
 
 def _build_services() -> tuple[DocumentService, DocumentAccessService]:
     documents = DocumentRepository()
+    documents.upsert(
+        DocumentRecord(
+            document_id="doc-ops",
+            title="Operations Handbook",
+            department_id="dept-operations",
+            document_type="policy",
+            owner="u-ops",
+            classification="internal",
+            status="active",
+            versions=[
+                DocumentVersionRecord(
+                    version=1,
+                    content="Standard operations handbook",
+                    metadata=DocumentMetadata(
+                        department_id="dept-operations",
+                        owner="u-ops",
+                        classification="internal",
+                        document_type="policy",
+                        status="active",
+                    ),
+                )
+            ],
+        )
+    )
+    documents.upsert(
+        DocumentRecord(
+            document_id="doc-eng",
+            title="Engineering Guide",
+            department_id="dept-engineering",
+            document_type="policy",
+            owner="u-eng",
+            classification="internal",
+            status="active",
+            versions=[
+                DocumentVersionRecord(
+                    version=1,
+                    content="engineering standards",
+                    metadata=DocumentMetadata(
+                        department_id="dept-engineering",
+                        owner="u-eng",
+                        classification="internal",
+                        document_type="policy",
+                        status="active",
+                    ),
+                )
+            ],
+        )
+    )
     access_repo = UserDocumentAccessRepository()
     rbac = RBACService(document_repository=documents, user_document_access_repository=access_repo)
     scope_builder = ScopeBuilderService(documents, access_repo)

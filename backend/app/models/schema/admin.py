@@ -112,6 +112,13 @@ class UserDepartmentResponse(BaseModel):
     department_id: str
 
 
+class UserDepartmentAccessResponse(BaseModel):
+    user_id: str
+    department_id: str
+    assigned_by: str
+    assigned_at: datetime
+
+
 class DocumentAccessGrantRequest(BaseModel):
     document_id: str = Field(..., examples=["doc-eng"], description="Internal document identifier; not a filesystem path.")
 
@@ -129,6 +136,7 @@ class UserDocumentAccessResponse(BaseModel):
 class UserDocumentScopeResponse(BaseModel):
     user_id: str
     department_id: str
+    department_ids: list[str] = Field(default_factory=list)
     authorized_document_ids: list[str] = Field(default_factory=list)
 
 

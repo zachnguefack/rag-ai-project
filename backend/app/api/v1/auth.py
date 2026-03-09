@@ -30,6 +30,7 @@ def register(request: RegisterRequest, auth_service: AuthService = Depends(get_a
         email=user.email,
         is_active=user.is_active,
         department_id=user.department_id,
+        department_ids=list(user.effective_department_ids),
         roles=sorted(user.role_names, key=lambda role: role.value),
     )
 
@@ -76,5 +77,6 @@ def me(current_user: User = Depends(get_current_user)) -> MeResponse:
         email=current_user.email,
         is_active=current_user.is_active,
         department_id=current_user.department_id,
+        department_ids=list(current_user.effective_department_ids),
         roles=sorted(current_user.role_names, key=lambda role: role.value),
     )
