@@ -199,3 +199,5 @@ All under `/api/v1/admin`:
 5. Revoke grant and verify document disappears from scope.
 
 `document_id` is always an internal identifier, never a filesystem path.
+
+- [Enterprise RAG persistence refactor](docs/enterprise_rag_persistence_refactor.md)

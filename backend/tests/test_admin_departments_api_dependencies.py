@@ -31,8 +31,9 @@ def _build_client(tmp_path: Path) -> TestClient:
     deps._runtime_document_repo = None
     deps._runtime_user_document_access_repo = None
     deps._runtime_service = None
+    deps._runtime_sqlite_store = None
 
-    settings = BackendSettings(data_dir=tmp_path, data_departments_root=tmp_path / "depart")
+    settings = BackendSettings(data_dir=tmp_path, data_departments_root=tmp_path / "depart", metadata_db_path=tmp_path / "metadata.db")
     app = FastAPI()
     app.include_router(build_v1_router(), prefix="/api/v1")
 
@@ -44,16 +45,9 @@ def _build_client(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
-def test_departments_endpoints_resolve_dependencies_and_use_filesystem(tmp_path: Path) -> None:
+def test_departments_endpoints_resolve_dependencies_and_persist_metadata(tmp_path: Path) -> None:
     root = tmp_path / "depart"
-    (root / "finance").mkdir(parents=True)
-
     client = _build_client(tmp_path)
-
-    list_response = client.get("/api/v1/admin/departments")
-    assert list_response.status_code == 200
-    listed_ids = {item["department_id"] for item in list_response.json()}
-    assert "finance" in listed_ids
 
     create_response = client.post(
         "/api/v1/admin/departments",
@@ -63,6 +57,11 @@ def test_departments_endpoints_resolve_dependencies_and_use_filesystem(tmp_path:
     body = create_response.json()
     assert body["department_id"] == "research"
     assert (root / "research").is_dir()
+
+    list_response = client.get("/api/v1/admin/departments")
+    assert list_response.status_code == 200
+    listed_ids = {item["department_id"] for item in list_response.json()}
+    assert "research" in listed_ids
 
 
 def test_openapi_still_loads_with_department_routes() -> None:

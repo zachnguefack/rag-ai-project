@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 _DEV_PASSWORD = "Password123!"
 
 _DEPARTMENTS: tuple[DepartmentRecord, ...] = (
-    DepartmentRecord(department_id="dept-it", name="IT", description="Information technology, infrastructure, and security operations."),
-    DepartmentRecord(department_id="dept-qa", name="Quality Assurance", description="Quality systems, change control, and deviation workflows."),
-    DepartmentRecord(department_id="dept-finance", name="Finance", description="Accounting, reimbursements, and budget governance."),
-    DepartmentRecord(department_id="dept-production", name="Production", description="Manufacturing execution and batch operations."),
-    DepartmentRecord(department_id="dept-hr", name="Human Resources", description="People operations, onboarding, and policy management."),
+    DepartmentRecord(department_id="dept-it", slug="dept-it", name="IT", description="Information technology, infrastructure, and security operations."),
+    DepartmentRecord(department_id="dept-qa", slug="dept-qa", name="Quality Assurance", description="Quality systems, change control, and deviation workflows."),
+    DepartmentRecord(department_id="dept-finance", slug="dept-finance", name="Finance", description="Accounting, reimbursements, and budget governance."),
+    DepartmentRecord(department_id="dept-production", slug="dept-production", name="Production", description="Manufacturing execution and batch operations."),
+    DepartmentRecord(department_id="dept-hr", slug="dept-hr", name="Human Resources", description="People operations, onboarding, and policy management."),
 )
 
 _USERS: tuple[dict[str, str | RoleName], ...] = (

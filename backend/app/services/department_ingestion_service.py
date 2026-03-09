@@ -77,11 +77,12 @@ class DepartmentIngestionService:
                 h.update(block)
         return h.hexdigest()
 
-    def _register_file(self, *, department_id: str, owner: str, source_path: Path, storage_path: Path) -> DocumentRecord:
+    def _register_file(self, *, department_id: str, owner: str, source_path: Path, storage_path: Path, content_type: str = "") -> DocumentRecord:
         now = datetime.now(timezone.utc)
         content = storage_path.read_text(encoding="utf-8", errors="ignore")
         doc_id = f"doc-{uuid4().hex[:12]}"
         ext = storage_path.suffix.lower().lstrip(".") or "file"
+        checksum = self._checksum(storage_path)
         metadata = DocumentMetadata(
             department_id=department_id,
             owner=owner,
@@ -95,7 +96,7 @@ class DepartmentIngestionService:
             content=content,
             metadata=metadata,
             storage_path=str(storage_path),
-            checksum=self._checksum(storage_path),
+            checksum=checksum,
             indexed=False,
             created_at=now,
         )
@@ -103,13 +104,19 @@ class DepartmentIngestionService:
             document_id=doc_id,
             title=storage_path.stem,
             original_filename=source_path.name,
+            stored_filename=storage_path.name,
             department_id=department_id,
             owner=owner,
             document_type=ext,
             classification="internal",
             status="active",
             storage_path=str(storage_path),
+            content_type=content_type,
+            size_bytes=storage_path.stat().st_size,
+            checksum=checksum,
+            indexing_status="pending",
             created_at=now,
+            uploaded_at=now,
             updated_at=now,
             versions=[version],
         )
@@ -140,6 +147,8 @@ class DepartmentIngestionService:
             for doc in docs:
                 if doc.versions:
                     doc.versions[-1].indexed = True
+                doc.indexing_status = "indexed"
+                doc.last_indexed_at = datetime.now(timezone.utc)
                 self._documents.upsert(doc)
 
         return DepartmentIngestionResponse(
@@ -168,8 +177,11 @@ class DepartmentIngestionService:
             self._enforce_upload_size_limit(payload=payload, filename=filename)
 
             target = dept_dir / filename
-            target.write_bytes(payload)
-            docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=Path(filename), storage_path=target))
+            try:
+                target.write_bytes(payload)
+            except OSError as exc:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed filesystem write for {filename}: {exc}") from exc
+            docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=Path(filename), storage_path=target, content_type=file.content_type or ""))
 
         if unsupported_files:
             supported = ", ".join(sorted(self._supported))

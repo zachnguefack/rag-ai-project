@@ -79,20 +79,27 @@ class DepartmentService:
         )
 
     def list_departments(self) -> list[DepartmentDescriptor]:
-        return [self._descriptor_for_dir(path) for path in sorted(self._root.iterdir()) if path.is_dir()]
+        items: list[DepartmentDescriptor] = []
+        for record in self._departments.list():
+            if not record.is_active:
+                continue
+            path = self._safe_department_path(record.slug)
+            path.mkdir(parents=True, exist_ok=True)
+            items.append(DepartmentDescriptor(department_id=record.department_id, name=record.name, description=record.description, path=path))
+        return items
 
     def create_department(self, department_id: str | None, name: str, description: str, actor_user_id: str | None = None) -> DepartmentDescriptor:
         source = department_id or name
         identifier = self.sanitize_department_identifier(source)
         target = self._safe_department_path(identifier)
-        if target.exists():
+        if self._departments.get(identifier) is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Department already exists.")
         try:
             target.mkdir(parents=True, exist_ok=False)
         except OSError as exc:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unable to create department directory: {exc}") from exc
 
-        self._departments.upsert(DepartmentRecord(department_id=identifier, name=name.strip(), description=description))
+        self._departments.upsert(DepartmentRecord(department_id=identifier, slug=identifier, name=name.strip(), description=description))
         self._audit.record_query_event(
             user_id=actor_user_id or "system",
             question=f"department.create:{identifier}",
@@ -103,25 +110,33 @@ class DepartmentService:
         return self._descriptor_for_dir(target)
 
     def get_department(self, department_id: str) -> DepartmentDescriptor:
-        path = self._safe_department_path(department_id)
-        if not path.exists() or not path.is_dir():
+        normalized = self.sanitize_department_identifier(department_id)
+        record = self._departments.get(normalized)
+        if record is None or not record.is_active:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found.")
-        return self._descriptor_for_dir(path)
+        path = self._safe_department_path(record.slug)
+        path.mkdir(parents=True, exist_ok=True)
+        return DepartmentDescriptor(department_id=record.department_id, name=record.name, description=record.description, path=path)
 
     def list_department_files(self, department_id: str) -> list[DepartmentFileSummaryResponse]:
         dept = self.get_department(department_id)
         files: list[DepartmentFileSummaryResponse] = []
-        for path in sorted(dept.path.iterdir()):
-            if not path.is_file():
-                continue
-            stat = path.stat()
+        for doc in self._documents.list_by_department(dept.department_id):
+            path = Path(doc.storage_path) if doc.storage_path else (dept.path / doc.stored_filename)
+            if path.exists() and path.is_file():
+                stat = path.stat()
+                last_modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+                size_bytes = stat.st_size
+            else:
+                last_modified = doc.uploaded_at
+                size_bytes = doc.size_bytes
             files.append(
                 DepartmentFileSummaryResponse(
-                    name=path.name,
+                    name=doc.stored_filename or doc.original_filename or path.name,
                     path=str(path),
-                    size_bytes=stat.st_size,
-                    content_type=mimetypes.guess_type(path.name)[0],
-                    last_modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                    size_bytes=size_bytes,
+                    content_type=doc.content_type or mimetypes.guess_type(path.name)[0],
+                    last_modified=last_modified,
                 )
             )
         return files
