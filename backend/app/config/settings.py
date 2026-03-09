@@ -34,6 +34,7 @@ class BackendSettings:
     # Optional allowlist for server-side filesystem ingestion endpoints.
     # Multiple roots can be provided using the OS path separator (':' on Linux/macOS, ';' on Windows).
     ingest_allowed_roots: str = os.getenv("RAG_INGEST_ALLOWED_ROOTS", "")
+    max_upload_file_size_bytes: int = int(os.getenv("RAG_MAX_UPLOAD_FILE_SIZE_BYTES", str(25 * 1024 * 1024)))
     vector_store_dir: Path = DEFAULT_CONFIG.vector_store_dir
     embedding_cache_path: Path = DEFAULT_CONFIG.embedding_cache_path
     collection_name: str = DEFAULT_CONFIG.collection_name

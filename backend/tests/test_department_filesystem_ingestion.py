@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+from io import BytesIO
 from pathlib import Path
+
+import pytest
+from fastapi import HTTPException, UploadFile
 from uuid import uuid4
 
 from app.config.settings import BackendSettings
@@ -71,3 +76,59 @@ def test_department_deletion_removes_docs_files_and_vectors(tmp_path: Path) -> N
     assert result["deleted_documents"] >= 1
     assert not (tmp_path / "QA").exists()
     assert rag.removed
+
+
+def test_upload_rejects_unsupported_extension(tmp_path: Path) -> None:
+    settings = BackendSettings(data_dir=tmp_path)
+    depts = DepartmentRepository()
+    docs = DocumentRepository()
+    service = DepartmentService(department_repository=depts, document_repository=docs, settings=settings)
+    dept_id = f"dept-{uuid4().hex[:8]}"
+    service.create_department(dept_id, "QA", "Quality", actor_user_id="u-admin")
+
+    ingest = DepartmentIngestionService(
+        department_repository=depts,
+        document_repository=docs,
+        settings=settings,
+        rbac_service=RBACService(document_repository=docs),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            ingest.ingest_upload(
+                user=_admin_user(),
+                department_id=dept_id,
+                files=[UploadFile(filename="malware.exe", file=BytesIO(b"x"))],
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert "Unsupported file type" in exc.value.detail
+
+
+def test_upload_rejects_file_larger_than_configured_limit(tmp_path: Path) -> None:
+    settings = BackendSettings(data_dir=tmp_path, max_upload_file_size_bytes=4)
+    depts = DepartmentRepository()
+    docs = DocumentRepository()
+    service = DepartmentService(department_repository=depts, document_repository=docs, settings=settings)
+    dept_id = f"dept-{uuid4().hex[:8]}"
+    service.create_department(dept_id, "QA", "Quality", actor_user_id="u-admin")
+
+    ingest = DepartmentIngestionService(
+        department_repository=depts,
+        document_repository=docs,
+        settings=settings,
+        rbac_service=RBACService(document_repository=docs),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            ingest.ingest_upload(
+                user=_admin_user(),
+                department_id=dept_id,
+                files=[UploadFile(filename="big.txt", file=BytesIO(b"12345"))],
+            )
+        )
+
+    assert exc.value.status_code == 413
+    assert "exceeds max upload size" in exc.value.detail
