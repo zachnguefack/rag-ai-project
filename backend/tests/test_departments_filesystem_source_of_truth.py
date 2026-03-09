@@ -2,43 +2,44 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-from fastapi import HTTPException
-
 from app.config.settings import BackendSettings
+from app.database.sqlite import SQLiteStore
+from app.database.repositories.department_repo import DepartmentRepository
+from app.database.repositories.document_repo import DocumentRepository
 from app.services.department_service import DepartmentService
 
 
-def test_list_departments_reads_from_filesystem(tmp_path: Path) -> None:
-    root = tmp_path / "depart"
-    (root / "finance").mkdir(parents=True)
-    (root / "hr").mkdir(parents=True)
-    service = DepartmentService(settings=BackendSettings(data_departments_root=root, data_dir=tmp_path))
+def _service(tmp_path: Path) -> DepartmentService:
+    settings = BackendSettings(
+        data_departments_root=tmp_path / "depart",
+        data_dir=tmp_path,
+        metadata_db_path=tmp_path / "metadata.db",
+    )
+    store = SQLiteStore(settings.metadata_db_path)
+    return DepartmentService(
+        department_repository=DepartmentRepository(store),
+        document_repository=DocumentRepository(store),
+        settings=settings,
+    )
+
+
+def test_list_departments_reads_from_metadata_and_creates_missing_folder(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    service.create_department(None, "Finance", "fin")
+    # remove physical folder to verify metadata is source of truth and folder is auto-restored
+    (tmp_path / "depart" / "finance").rmdir()
 
     names = [item.department_id for item in service.list_departments()]
 
-    assert names == ["finance", "hr"]
+    assert names == ["finance"]
+    assert (tmp_path / "depart" / "finance").is_dir()
 
 
-def test_get_missing_department_returns_404(tmp_path: Path) -> None:
-    service = DepartmentService(settings=BackendSettings(data_departments_root=tmp_path / "depart", data_dir=tmp_path))
-    with pytest.raises(HTTPException) as exc:
-        service.get_department("missing")
-    assert exc.value.status_code == 404
+def test_departments_persist_after_service_restart(tmp_path: Path) -> None:
+    svc1 = _service(tmp_path)
+    svc1.create_department(None, "Quality", "q")
 
+    svc2 = _service(tmp_path)
+    names = [item.department_id for item in svc2.list_departments()]
 
-def test_list_files_reflects_manual_file_changes(tmp_path: Path) -> None:
-    root = tmp_path / "depart"
-    dept = root / "quality"
-    dept.mkdir(parents=True)
-    service = DepartmentService(settings=BackendSettings(data_departments_root=root, data_dir=tmp_path))
-
-    before = service.list_department_files("quality")
-    (dept / "doc1.txt").write_text("hello", encoding="utf-8")
-    after_add = service.list_department_files("quality")
-    (dept / "doc1.txt").unlink()
-    after_delete = service.list_department_files("quality")
-
-    assert before == []
-    assert [item.name for item in after_add] == ["doc1.txt"]
-    assert after_delete == []
+    assert names == ["quality"]

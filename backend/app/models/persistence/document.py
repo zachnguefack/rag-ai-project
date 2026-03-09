@@ -24,6 +24,7 @@ class DocumentVersionRecord(BaseModel):
 
 
 class DocumentRecord(BaseModel):
+    id: int | None = None
     document_id: str
     title: str
     department_id: str
@@ -32,8 +33,15 @@ class DocumentRecord(BaseModel):
     classification: str = "internal"
     status: str = "active"
     original_filename: str = ""
+    stored_filename: str = ""
     storage_path: str = ""
+    content_type: str = ""
+    size_bytes: int = 0
+    checksum: str = ""
+    indexing_status: str = "pending"
+    last_indexed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     versions: list[DocumentVersionRecord] = Field(default_factory=list)
 

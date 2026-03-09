@@ -9,6 +9,7 @@ from app.database.repositories.document_repo import DocumentRepository
 from app.database.repositories.ingest_job_repo import IngestJobRepository
 from app.database.repositories.user_document_access_repo import UserDocumentAccessRepository
 from app.database.repositories.user_repo import UserRepository
+from app.database.sqlite import SQLiteStore
 from app.models.domain.user import User
 from app.security.oauth2 import bearer_scheme
 from app.services.audit_service import AuditService
@@ -42,6 +43,7 @@ _runtime_retrieval_service: RetrievalService | None = None
 _runtime_secure_retriever: SecureRetriever | None = None
 _runtime_ingestion_service: IngestionService | None = None
 _runtime_ingest_job_repo: IngestJobRepository | None = None
+_runtime_sqlite_store: SQLiteStore | None = None
 
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 x_user_id_header = APIKeyHeader(name="X-User-Id", auto_error=False, description="Local/dev identity header consumed by RBAC resolution.")
@@ -54,10 +56,17 @@ def get_settings() -> BackendSettings:
     return _runtime_settings
 
 
-def get_document_repository() -> DocumentRepository:
+
+def get_sqlite_store(settings: BackendSettings = Depends(get_settings)) -> SQLiteStore:
+    global _runtime_sqlite_store
+    if _runtime_sqlite_store is None:
+        _runtime_sqlite_store = SQLiteStore(settings.metadata_db_path)
+    return _runtime_sqlite_store
+
+def get_document_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> DocumentRepository:
     global _runtime_document_repo
     if _runtime_document_repo is None:
-        _runtime_document_repo = DocumentRepository()
+        _runtime_document_repo = DocumentRepository(store)
     return _runtime_document_repo
 
 
@@ -68,10 +77,10 @@ def get_user_repository() -> UserRepository:
     return _runtime_user_repo
 
 
-def get_department_repository() -> DepartmentRepository:
+def get_department_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> DepartmentRepository:
     global _runtime_department_repo
     if _runtime_department_repo is None:
-        _runtime_department_repo = DepartmentRepository()
+        _runtime_department_repo = DepartmentRepository(store)
     return _runtime_department_repo
 
 
@@ -92,10 +101,10 @@ def get_scope_builder_service(
     return _runtime_scope_builder
 
 
-def get_ingest_job_repository() -> IngestJobRepository:
+def get_ingest_job_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> IngestJobRepository:
     global _runtime_ingest_job_repo
     if _runtime_ingest_job_repo is None:
-        _runtime_ingest_job_repo = IngestJobRepository()
+        _runtime_ingest_job_repo = IngestJobRepository(store)
     return _runtime_ingest_job_repo
 
 
