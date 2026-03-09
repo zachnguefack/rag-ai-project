@@ -10,6 +10,7 @@ from app.models.domain.user import User
 from app.models.persistence.document import DocumentMetadata, DocumentRecord, DocumentVersionRecord
 from app.models.schema.document import (
     AdminDocumentListResponse,
+    DepartmentDocumentListItemResponse,
     DocumentACLGrantResponse,
     DocumentACLResponse,
     DocumentACLRevocationResponse,
@@ -308,6 +309,26 @@ class DocumentService:
             current_version=record.current_version,
             content=self._extract_content(record),
             metadata=self._to_metadata_response(latest_metadata),
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+        )
+
+
+    def to_department_document_list_item(self, record: DocumentRecord) -> DepartmentDocumentListItemResponse:
+        return DepartmentDocumentListItemResponse(
+            document_id=record.document_id,
+            department_id=record.department_id,
+            title=record.title,
+            original_filename=record.original_filename or None,
+            stored_filename=record.stored_filename or None,
+            storage_path=record.storage_path,
+            current_version=record.current_version,
+            owner=record.owner,
+            classification=record.classification,
+            document_type=record.document_type,
+            status=record.status,
+            content_type=record.content_type or None,
+            size_bytes=record.size_bytes if record.size_bytes > 0 else None,
             created_at=record.created_at,
             updated_at=record.updated_at,
         )
