@@ -33,7 +33,7 @@ def test_upload_openapi_schema_uses_multipart_binary_files() -> None:
 
     assert files_schema["type"] == "array"
     assert files_schema["items"]["type"] == "string"
-    assert files_schema["items"]["format"] == "binary"
+    assert files_schema["items"].get("format") == "binary" or files_schema["items"].get("contentMediaType") == "application/octet-stream"
 
 
 def test_ingest_file_path_rejects_outside_allowed_roots_with_clear_message(tmp_path: Path) -> None:

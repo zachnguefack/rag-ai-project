@@ -118,6 +118,20 @@ class DepartmentIngestionService:
         self._documents.upsert(record)
         return record
 
+    def _validate_upload_files(self, files: list[UploadFile]) -> None:
+        if not files:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files were uploaded.")
+        if not any((item.filename or "").strip() for item in files):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded files are missing filenames.")
+
+    def _enforce_upload_size_limit(self, *, payload: bytes, filename: str) -> None:
+        max_size = int(self._settings.max_upload_file_size_bytes)
+        if max_size > 0 and len(payload) > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"File '{filename}' exceeds max upload size of {max_size} bytes.",
+            )
+
     def _index_and_finalize(self, docs: list[DocumentRecord], department_id: str) -> DepartmentIngestionResponse:
         indexed_files = 0
         indexed_chunks = 0
@@ -140,17 +154,40 @@ class DepartmentIngestionService:
 
     async def ingest_upload(self, *, user: User, department_id: str, files: list[UploadFile]) -> DepartmentIngestionResponse:
         self._enforce_admin(user)
+        self._validate_upload_files(files)
         _, dept_dir = self._department_dir(department_id)
         docs: list[DocumentRecord] = []
+        unsupported_files: list[str] = []
+
         for file in files:
-            suffix = Path(file.filename or "").suffix.lower()
+            filename = Path(file.filename or f"file-{uuid4().hex}").name
+            suffix = Path(filename).suffix.lower()
             if suffix not in self._supported:
+                unsupported_files.append(filename)
                 continue
-            target = dept_dir / Path(file.filename or f"file-{uuid4().hex}").name
+
             payload = await file.read()
+            self._enforce_upload_size_limit(payload=payload, filename=filename)
+
+            target = dept_dir / filename
             target.write_bytes(payload)
-            docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=Path(file.filename or target.name), storage_path=target))
-        return self._index_and_finalize(docs, department_id)
+            docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=Path(filename), storage_path=target))
+
+        if unsupported_files:
+            supported = ", ".join(sorted(self._supported))
+            file_list = ", ".join(sorted(unsupported_files))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file type(s): {file_list}. Supported extensions: {supported}",
+            )
+
+        if not docs:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid files were uploaded.")
+
+        try:
+            return self._index_and_finalize(docs, department_id)
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ingestion pipeline failed: {exc}") from exc
 
     def ingest_file_path(self, *, user: User, department_id: str, file_path: str) -> DepartmentIngestionResponse:
         self._enforce_admin(user)
