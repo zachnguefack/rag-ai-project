@@ -19,7 +19,7 @@ class _PermissiveRBAC:
 
 
 def _admin_user() -> User:
-    role = Role(name=RoleName.SYSTEM_ADMINISTRATOR, permissions=frozenset({Permission.MANAGE_USERS}))
+    role = Role(name=RoleName.SYSTEM_ADMINISTRATOR, permissions=frozenset({Permission.MANAGE_USERS, Permission.INGEST_DOCUMENT, Permission.READ_DOCUMENT}))
     return User(user_id="u-admin", username="admin", email="admin@example.com", department_id="dept-general", roles=(role,))
 
 
@@ -71,3 +71,51 @@ def test_openapi_still_loads_with_department_routes() -> None:
     schema = app.openapi()
 
     assert "/api/v1/admin/departments" in schema["paths"]
+
+
+def test_department_documents_listing_is_lightweight_contract(tmp_path: Path) -> None:
+    client = _build_client(tmp_path)
+
+    create_department = client.post("/api/v1/admin/departments", json={"name": "Operations", "description": "Ops"})
+    assert create_department.status_code == 200
+
+    create_document = client.post(
+        "/api/v1/documents",
+        json={
+            "document_id": "doc-ops-list-1",
+            "title": "Ops Checklist",
+            "content": "Checklist content",
+            "metadata": {
+                "department_id": "operations",
+                "owner": "u-admin",
+                "classification": "internal",
+                "document_type": "policy",
+                "status": "active",
+            },
+        },
+    )
+    assert create_document.status_code == 200
+
+    response = client.get("/api/v1/admin/departments/operations/documents")
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body, list)
+    assert body
+
+    item = body[0]
+    assert "content" not in item
+    assert "metadata" not in item
+    assert "storage_path" in item
+    assert "department_id" in item
+    assert "document_id" in item
+
+
+def test_department_documents_openapi_uses_listing_item_schema() -> None:
+    app = FastAPI()
+    app.include_router(build_v1_router(), prefix="/api/v1")
+
+    schema = app.openapi()
+    operation = schema["paths"]["/api/v1/admin/departments/{department_id}/documents"]["get"]
+    items_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]["items"]
+
+    assert items_schema["$ref"].endswith("/DepartmentDocumentListItemResponse")

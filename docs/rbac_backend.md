@@ -135,6 +135,7 @@ Retrieval sequence:
 - `POST /api/v1/admin/departments`
 - `GET /api/v1/admin/departments/{department_id}`
 - `GET /api/v1/admin/departments/{department_id}/documents`
+  - Returns lightweight document listing metadata (no `content` field) including file/storage references for UI management.
 - `PUT /api/v1/admin/users/{user_id}/department`
 - `POST /api/v1/admin/users/{user_id}/document-access`
 - `GET /api/v1/admin/users/{user_id}/document-access`

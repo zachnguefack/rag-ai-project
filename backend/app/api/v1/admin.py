@@ -49,6 +49,7 @@ from app.models.schema.document import (
     AdminDocumentListResponse,
     DocumentAuditListResponse,
     DocumentDepartmentAssignmentRequest,
+    DepartmentDocumentListItemResponse,
     DocumentMetadataDetailResponse,
     DocumentResponse,
 )
@@ -199,12 +200,12 @@ def get_department(department_id: str, current_user: User = Depends(get_current_
     return DepartmentResponse(department_id=item.department_id, name=item.name, description=item.description, path=str(item.path), file_count=len(department_service.list_department_files(item.department_id)))
 
 
-@router.get('/departments/{department_id}/documents', response_model=list[DocumentResponse], dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Departments"])
+@router.get('/departments/{department_id}/documents', response_model=list[DepartmentDocumentListItemResponse], dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Departments"])
 @require_permissions(Permission.MANAGE_USERS)
-def get_department_documents(department_id: str, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service), department_service: DepartmentService = Depends(get_department_service), document_service: DocumentService = Depends(get_document_service)) -> list[DocumentResponse]:
+def get_department_documents(department_id: str, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service), department_service: DepartmentService = Depends(get_department_service), document_service: DocumentService = Depends(get_document_service)) -> list[DepartmentDocumentListItemResponse]:
     rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
     docs = department_service.list_documents_for_department(department_id)
-    return [document_service._to_document_response(doc) for doc in docs]
+    return [document_service.to_department_document_list_item(doc) for doc in docs]
 
 
 

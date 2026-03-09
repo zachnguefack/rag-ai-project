@@ -52,6 +52,24 @@ class DocumentResponse(BaseModel):
     updated_at: datetime
 
 
+class DepartmentDocumentListItemResponse(BaseModel):
+    document_id: str
+    department_id: str
+    title: str
+    original_filename: str | None = None
+    stored_filename: str | None = None
+    storage_path: str
+    current_version: int
+    owner: str
+    classification: str
+    document_type: str
+    status: str
+    content_type: str | None = None
+    size_bytes: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class DocumentVersionResponse(BaseModel):
     version_id: str = ""
     version: int
@@ -156,6 +174,29 @@ class DocumentAuditListResponse(BaseModel):
     items: list[DocumentAuditEventResponse] = Field(default_factory=list)
     count: int
 
+
+
+DepartmentDocumentListItemResponse.model_config = {
+    "json_schema_extra": {
+        "example": {
+            "document_id": "doc-123",
+            "department_id": "it",
+            "title": "SOP_IT_001_Backup_Validation_Procedure",
+            "original_filename": "SOP_IT_001_Backup_Validation_Procedure.pdf",
+            "stored_filename": "doc-123.pdf",
+            "storage_path": "./data/depart/it/doc-123.pdf",
+            "current_version": 1,
+            "owner": "jane.doe",
+            "classification": "internal",
+            "document_type": "policy",
+            "status": "active",
+            "content_type": "application/pdf",
+            "size_bytes": 248193,
+            "created_at": "2026-03-09T22:18:08.172Z",
+            "updated_at": "2026-03-09T22:18:08.172Z",
+        }
+    }
+}
 
 DocumentSummaryResponse.model_config = {
     "json_schema_extra": {
