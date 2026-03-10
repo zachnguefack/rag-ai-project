@@ -30,7 +30,7 @@ class RAGApplicationService:
         )
         self._state_store = IndexStateStore(settings.vector_store_dir / "index_state.json")
         self._indexer = SmartIndexer(
-            data_dir=settings.data_dir,
+            data_dir=settings.data_departments_root,
             ingestion_pipeline=self._ingestion_pipeline,
             embedding_manager=self._embedding_manager,
             vector_store=self._vector_store,

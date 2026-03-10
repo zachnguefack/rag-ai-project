@@ -46,6 +46,7 @@ def rag_query(
         user=user,
         mode=request.mode,
         strict_document_scope=request.strict_document_scope,
+        department_id=request.department_id,
         document_ids=request.document_ids,
     )
 

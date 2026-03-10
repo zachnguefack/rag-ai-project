@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class RAGQueryRequest(BaseModel):
     question: str = Field(..., min_length=2, examples=["What is the reimbursement limit for meals?"])
+    department_id: str = Field(..., min_length=2, examples=["dept-it"])
     mode: str = Field(default="balanced", pattern="^(strict|balanced)$", examples=["balanced"])
     strict_document_scope: bool | None = Field(
         default=None,

@@ -31,7 +31,7 @@ class IngestionReport:
 class DocumentIngestionPipeline:
     """Robust ingestion with extension-aware loaders and metadata normalization."""
 
-    SUPPORTED_EXTENSIONS: Sequence[str] = (".pdf", ".txt", ".csv", ".docx", ".xlsx", ".json")
+    SUPPORTED_EXTENSIONS: Sequence[str] = (".pdf", ".txt", ".md", ".markdown", ".csv", ".docx", ".xlsx", ".json")
 
     def __init__(self, log_level: str = "INFO"):
         logging.basicConfig(
@@ -42,7 +42,20 @@ class DocumentIngestionPipeline:
     @staticmethod
     def _normalize_metadata(md: Dict[str, Any], source_file: Path) -> Dict[str, Any]:
         md = dict(md or {})
-        md["source"] = str(source_file.resolve())
+        resolved = source_file.resolve()
+        department_id = str(md.get("department_id") or "")
+        if not department_id:
+            parts = list(resolved.parts)
+            if "depart" in parts:
+                idx = parts.index("depart")
+                if idx + 1 < len(parts):
+                    department_id = parts[idx + 1]
+
+        md["source"] = str(resolved)
+        md["source_path"] = str(resolved)
+        md["document_name"] = source_file.name
+        if department_id:
+            md["department_id"] = department_id
         md["file_name"] = source_file.name
         md["ext"] = source_file.suffix.lower().lstrip(".")
         md["loaded_at"] = datetime.now(tz=timezone.utc).isoformat()
@@ -68,6 +81,8 @@ class DocumentIngestionPipeline:
         if ext == ".pdf":
             return PyMuPDFLoader(str(path)).load()
         if ext == ".txt":
+            return TextLoader(str(path), encoding="utf-8").load()
+        if ext in {".md", ".markdown"}:
             return TextLoader(str(path), encoding="utf-8").load()
         if ext == ".csv":
             return CSVLoader(str(path)).load()
