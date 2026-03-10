@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 
+from fastapi import HTTPException
+
 from app.database.repositories.document_repo import DocumentRepository
 from app.database.repositories.user_department_access_repo import UserDepartmentAccessRepository
 from app.database.repositories.user_document_access_repo import UserDocumentAccessRepository
@@ -25,7 +27,9 @@ class FakeRetrievalService:
                 "metadata_filter": metadata_filter,
             }
         )
-        if strict_document_scope and metadata_filter == {"document_id": {"$in": []}}:
+        if strict_document_scope and metadata_filter == {
+            "$and": [{"department_id": {"$in": ["dept-unknown"]}}, {"document_id": {"$in": []}}]
+        }:
             return {
                 "answer": "No relevant information was found in the available documentation.",
                 "citations": [],
@@ -165,9 +169,23 @@ class SecureAccessModelTests(unittest.TestCase):
     def test_secure_retriever_excludes_unauthorized_documents(self) -> None:
         fake = FakeRetrievalService()
         retriever = SecureRetriever(fake, self.access_service)
-        retriever.retrieve(question="q", user=self.user_ops, mode="balanced", strict_document_scope=False)
+        retriever.retrieve(
+            question="q",
+            user=self.user_ops,
+            mode="balanced",
+            strict_document_scope=False,
+            department_id="dept-operations",
+        )
 
-        self.assertEqual(fake.calls[-1]["metadata_filter"], {"document_id": {"$in": ["doc-ops"]}})
+        self.assertEqual(
+            fake.calls[-1]["metadata_filter"],
+            {
+                "$and": [
+                    {"department_id": {"$in": ["dept-operations"]}},
+                    {"document_id": {"$in": ["doc-ops"]}},
+                ]
+            },
+        )
 
     def test_strict_document_scope_blocks_when_no_authorized_evidence(self) -> None:
         fake = FakeRetrievalService()
@@ -182,8 +200,24 @@ class SecureAccessModelTests(unittest.TestCase):
 
         result = retriever.retrieve(question="q", user=denied_user, mode="strict", strict_document_scope=True)
 
-        self.assertEqual(fake.calls[-1]["metadata_filter"], {"document_id": {"$in": []}})
+        self.assertEqual(
+            fake.calls[-1]["metadata_filter"],
+            {"$and": [{"department_id": {"$in": ["dept-unknown"]}}, {"document_id": {"$in": []}}]},
+        )
         self.assertIn("No relevant information", result["answer"])
+
+    def test_department_scope_denies_unassigned_department(self) -> None:
+        fake = FakeRetrievalService()
+        retriever = SecureRetriever(fake, self.access_service)
+
+        with self.assertRaises(HTTPException):
+            retriever.retrieve(
+                question="q",
+                user=self.user_ops,
+                mode="balanced",
+                strict_document_scope=False,
+                department_id="dept-finance",
+            )
 
 
 if __name__ == "__main__":
