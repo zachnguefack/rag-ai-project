@@ -25,8 +25,10 @@ router = APIRouter(tags=["RAG Query"])
     response_model=RAGQueryResponse,
     summary="Query enterprise knowledge base",
     description=(
-        "Answers a user question using secure department-based retrieval scope. "
-        "Access scope is resolved before retrieval: department docs + explicit grants - revoked grants."
+        "Answers a question using authorization-aware retrieval. The backend computes query scope as "
+        "(department documents + explicit document grants - revoked grants) based on the authenticated user. "
+        "Normal users are never allowed to query outside this scope. Admin-equivalent users can query broader "
+        "scope only when their role grants department/document access through the same RBAC model."
     ),
     responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}},
     dependencies=[Depends(validate_api_key)],
