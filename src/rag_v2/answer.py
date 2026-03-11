@@ -101,6 +101,16 @@ class RAGService:
         """Run retrieval, validate evidence, and optionally call the LLM."""
         policy = policy or AnswerPolicy()
 
+        LOGGER.info(
+            "RAG answer request mode=%s strict_scope=%s top_k=%s final_k=%s threshold=%.4f",
+            policy.mode,
+            policy.strict_document_scope,
+            policy.top_k_retrieve,
+            policy.final_k,
+            policy.score_threshold,
+        )
+        LOGGER.debug("RAG answer metadata_filter=%s", metadata_filter)
+
         results = retrieve_postprocessed(
             self.retriever,
             question,
@@ -112,6 +122,14 @@ class RAGService:
         )
         confidence = self.compute_confidence(results)
         doc_grounded = self._has_sufficient_retrieval_evidence(results, confidence, policy)
+        LOGGER.info(
+            "RAG retrieval evaluated results=%s confidence=%.4f min_results=%s min_confidence=%.4f doc_grounded=%s",
+            len(results),
+            float(confidence.get("score", 0.0)),
+            policy.min_results,
+            policy.min_confidence,
+            doc_grounded,
+        )
 
         strict_document_scope_enabled = self._document_scope_required(policy)
         if strict_document_scope_enabled and not doc_grounded:

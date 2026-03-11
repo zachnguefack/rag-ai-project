@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -10,10 +11,14 @@ from app.rag_engine.retrieval.filters import (
     combine_metadata_filters,
     department_id_filter,
     document_id_filter,
+    source_filter,
     source_path_filter,
 )
 from app.services.document_access_service import DocumentAccessService
 from app.services.retrieval_service import RetrievalService
+
+
+LOGGER = logging.getLogger("app.secure_retriever")
 
 
 class SecureRetriever:
@@ -91,9 +96,28 @@ class SecureRetriever:
         department_filter = department_id_filter(effective_departments) if effective_departments else None
         doc_filter = document_id_filter(scoped_document_ids)
         allowed_source_paths = self._build_allowed_source_paths(user, scoped_document_ids)
-        source_filter = source_path_filter(allowed_source_paths) if allowed_source_paths else None
-        scope_filter = any_metadata_filter(doc_filter, source_filter)
+        # Support both legacy metadata key (source_path) and actual vector metadata key (source).
+        source_path_scope_filter = source_path_filter(allowed_source_paths) if allowed_source_paths else None
+        source_scope_filter = source_filter(allowed_source_paths) if allowed_source_paths else None
+        source_any_filter = any_metadata_filter(source_path_scope_filter, source_scope_filter)
+        scope_filter = any_metadata_filter(doc_filter, source_any_filter)
         metadata_filter = combine_metadata_filters(department_filter, scope_filter)
+
+        LOGGER.info(
+            "RAG scope built user_id=%s departments=%s authorized_doc_count=%s requested_doc_count=%s "
+            "source_path_allow_count=%s strict_scope=%s",
+            user.user_id,
+            effective_departments,
+            len(scoped_document_ids),
+            0 if requested_document_ids is None else len(requested_document_ids),
+            len(allowed_source_paths),
+            strict_document_scope,
+        )
+        LOGGER.debug(
+            "RAG metadata filter user_id=%s filter=%s",
+            user.user_id,
+            metadata_filter,
+        )
 
         result = self._retrieval.query(
             question=question,
@@ -103,6 +127,7 @@ class SecureRetriever:
         )
 
         # Defense in depth: strip citations that are not part of authorized internal IDs.
+        before_citations = len(result.get("citations", []))
         allowed = set(scoped_document_ids)
         safe_citations: list[Any] = []
         for citation in result.get("citations", []):
@@ -115,4 +140,11 @@ class SecureRetriever:
             if any(doc_id in citation_text for doc_id in allowed):
                 safe_citations.append(citation)
         result["citations"] = safe_citations
+        LOGGER.info(
+            "RAG result user_id=%s citations_before=%s citations_after=%s confidence=%s",
+            user.user_id,
+            before_citations,
+            len(safe_citations),
+            result.get("confidence", {}),
+        )
         return result

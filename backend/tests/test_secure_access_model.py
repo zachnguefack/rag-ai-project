@@ -187,6 +187,45 @@ class SecureAccessModelTests(unittest.TestCase):
             },
         )
 
+
+    def test_allow_list_filter_supports_source_and_source_path_keys(self) -> None:
+        fake = FakeRetrievalService()
+        user = User(
+            user_id=self.user_ops.user_id,
+            username=self.user_ops.username,
+            email=self.user_ops.email,
+            department_id=self.user_ops.department_id,
+            department_ids=self.user_ops.department_ids,
+            is_active=self.user_ops.is_active,
+            roles=self.user_ops.roles,
+            document_allow_list=frozenset({"/tmp/doc-ops.md"}),
+        )
+        retriever = SecureRetriever(fake, self.access_service)
+
+        retriever.retrieve(
+            question="q",
+            user=user,
+            mode="balanced",
+            strict_document_scope=False,
+            department_id="dept-operations",
+        )
+
+        metadata_filter = fake.calls[-1]["metadata_filter"]
+        self.assertEqual(metadata_filter["$and"][0], {"department_id": {"$in": ["dept-operations"]}})
+
+        scope_or = metadata_filter["$and"][1]["$or"]
+        doc_scope = scope_or[0]["document_id"]["$in"]
+        self.assertIn("doc-ops", doc_scope)
+        self.assertEqual(
+            scope_or[1],
+            {
+                "$or": [
+                    {"source_path": {"$in": ["/tmp/doc-ops.md"]}},
+                    {"source": {"$in": ["/tmp/doc-ops.md"]}},
+                ]
+            },
+        )
+
     def test_empty_authorized_scope_returns_safe_empty_result_without_query(self) -> None:
         fake = FakeRetrievalService()
         retriever = SecureRetriever(fake, self.access_service)

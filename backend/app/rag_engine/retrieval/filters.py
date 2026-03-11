@@ -13,6 +13,10 @@ def source_path_filter(source_paths: list[str]) -> dict[str, dict[str, list[str]
     return {"source_path": {"$in": source_paths}}
 
 
+def source_filter(sources: list[str]) -> dict[str, dict[str, list[str]]]:
+    return {"source": {"$in": sources}}
+
+
 def combine_metadata_filters(*filters: dict | None) -> dict | None:
     valid = [f for f in filters if f]
     if not valid:
