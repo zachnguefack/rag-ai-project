@@ -38,7 +38,8 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
             "for local/dev identity simulation consumed by RBAC resolution.\n\n"
             "Access model: each user has one primary department and each document belongs to one primary "
             "department. Effective retrieval scope is computed before retrieval as: department documents + "
-            "explicit user document grants - revoked grants. `document_id` is an internal identifier, not "
+            "explicit user document grants - revoked grants. Query endpoints (`/api/v1/rag/query` and legacy "
+            "`/api/v1/chat/ask`) enforce this scope server-side. `document_id` is an internal identifier, not "
             "a filesystem path."
         ),
         version=runtime_settings.app_version,

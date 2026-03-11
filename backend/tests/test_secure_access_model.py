@@ -187,7 +187,7 @@ class SecureAccessModelTests(unittest.TestCase):
             },
         )
 
-    def test_strict_document_scope_blocks_when_no_authorized_evidence(self) -> None:
+    def test_empty_authorized_scope_returns_safe_empty_result_without_query(self) -> None:
         fake = FakeRetrievalService()
         retriever = SecureRetriever(fake, self.access_service)
         denied_user = User(
@@ -200,11 +200,22 @@ class SecureAccessModelTests(unittest.TestCase):
 
         result = retriever.retrieve(question="q", user=denied_user, mode="strict", strict_document_scope=True)
 
-        self.assertEqual(
-            fake.calls[-1]["metadata_filter"],
-            {"$and": [{"department_id": {"$in": ["dept-unknown"]}}, {"document_id": {"$in": []}}]},
-        )
+        self.assertEqual(fake.calls, [])
         self.assertIn("No relevant information", result["answer"])
+
+
+    def test_requesting_unauthorized_document_id_is_forbidden(self) -> None:
+        fake = FakeRetrievalService()
+        retriever = SecureRetriever(fake, self.access_service)
+
+        with self.assertRaises(HTTPException):
+            retriever.retrieve(
+                question="q",
+                user=self.user_ops,
+                mode="balanced",
+                strict_document_scope=False,
+                document_ids=["doc-finance"],
+            )
 
     def test_department_scope_denies_unassigned_department(self) -> None:
         fake = FakeRetrievalService()
