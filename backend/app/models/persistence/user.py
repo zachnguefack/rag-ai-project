@@ -10,7 +10,7 @@ class UserRecord(BaseModel):
     username: str
     email: EmailStr
     password_hash: str
-    department_id: str = "dept-general"
+    department_id: str = ""
     department_ids: list[str] = Field(default_factory=list)
     is_active: bool = True
     roles: list[RoleName] = Field(default_factory=list)

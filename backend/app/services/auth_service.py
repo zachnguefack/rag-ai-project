@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 
 from fastapi import HTTPException, status
 
 from app.config.settings import BackendSettings
 from app.database.repositories.role_repo import RoleRepository
+from app.database.repositories.user_department_access_repo import UserDepartmentAccessRepository
 from app.database.repositories.user_repo import UserRepository
 from app.models.domain.user import User
 from app.models.persistence.user import UserRecord
@@ -14,16 +16,21 @@ from app.security.password import hash_password, verify_password
 from app.security.policies import RoleName
 
 
+LOGGER = logging.getLogger("app.auth")
+
+
 class AuthService:
     def __init__(
         self,
         settings: BackendSettings,
         user_repository: UserRepository | None = None,
         role_repository: RoleRepository | None = None,
+        user_department_access_repository: UserDepartmentAccessRepository | None = None,
     ) -> None:
         self._settings = settings
         self._users = user_repository or UserRepository()
         self._roles = role_repository or RoleRepository()
+        self._department_access = user_department_access_repository or UserDepartmentAccessRepository()
         self._revoked_token_ids: set[str] = set()
 
     def register_user(self, username: str, email: str, password: str) -> UserRecord:
@@ -48,9 +55,40 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled.")
         return record
 
+
+    def _resolve_department_membership(self, record: UserRecord) -> tuple[str, tuple[str, ...]]:
+        assigned_departments = [
+            entry.department_id
+            for entry in self._department_access.list_departments_for_user(record.user_id)
+            if entry.department_id
+        ]
+        if assigned_departments:
+            department_ids = tuple(sorted(set(assigned_departments)))
+            if record.department_id and record.department_id not in department_ids:
+                LOGGER.warning(
+                    "Legacy user.department_id does not match RBAC assignments user_id=%s legacy=%s rbac=%s",
+                    record.user_id,
+                    record.department_id,
+                    list(department_ids),
+                )
+            return department_ids[0], department_ids
+
+        fallback_departments = [dep for dep in record.department_ids if dep]
+        if fallback_departments:
+            department_ids = tuple(dict.fromkeys(fallback_departments))
+            return department_ids[0], department_ids
+
+        if record.department_id:
+            return record.department_id, (record.department_id,)
+
+        return "", tuple()
+
     def hydrate_user(self, record: UserRecord) -> User:
         roles = tuple(self._roles.get(role_name) for role_name in record.roles)
+        primary_department_id, department_ids = self._resolve_department_membership(record)
         user = self._users.hydrate(record, roles)
+        user.department_id = primary_department_id
+        user.department_ids = department_ids
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled.")
         return user

@@ -19,9 +19,12 @@ class User:
 
     @property
     def effective_department_ids(self) -> tuple[str, ...]:
-        if self.department_ids:
-            return self.department_ids
-        return (self.department_id,)
+        normalized = tuple(dict.fromkeys(dep for dep in self.department_ids if dep))
+        if normalized:
+            return normalized
+        if self.department_id:
+            return (self.department_id,)
+        return tuple()
 
     @property
     def role_names(self) -> frozenset[RoleName]:
