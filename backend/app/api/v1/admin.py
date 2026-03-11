@@ -150,11 +150,27 @@ def get_user_roles(user_id: str, current_user: User = Depends(get_current_user),
     return UserRoleListResponse(user_id=user_id, roles=sorted(roles, key=lambda role_name: role_name.value))
 
 
-@router.put('/users/{user_id}/roles', response_model=UserRoleListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Roles & Permissions"])
+@router.put('/users/{user_id}/roles', response_model=UserRoleListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Roles & Permissions"], summary="Replace all roles for a user", description="Replaces all assigned roles for the user with the provided list.")
 @require_permissions(Permission.MANAGE_ROLES)
 def replace_user_roles(user_id: str, payload: UserRoleReplaceRequest, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service)) -> UserRoleListResponse:
     rbac_service.enforce_permission(current_user, Permission.MANAGE_ROLES)
     roles = rbac_service.replace_user_roles(user_id=user_id, roles=payload.roles)
+    return UserRoleListResponse(user_id=user_id, roles=sorted(roles, key=lambda role_name: role_name.value))
+
+
+@router.post('/users/{user_id}/roles/{role}', response_model=UserRoleListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Roles & Permissions"], summary="Assign a role to a user", description="Assigns a role to the user without replacing existing roles. If already assigned, roles remain unchanged.")
+@require_permissions(Permission.MANAGE_ROLES)
+def assign_user_role(user_id: str, role: RoleName, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service)) -> UserRoleListResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_ROLES)
+    roles = rbac_service.assign_user_role(user_id=user_id, role=role)
+    return UserRoleListResponse(user_id=user_id, roles=sorted(roles, key=lambda role_name: role_name.value))
+
+
+@router.delete('/users/{user_id}/roles/{role}', response_model=UserRoleListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Roles & Permissions"], summary="Remove a role from a user", description="Removes a specific role from the user and returns the updated role list.")
+@require_permissions(Permission.MANAGE_ROLES)
+def remove_user_role(user_id: str, role: RoleName, current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service)) -> UserRoleListResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_ROLES)
+    roles = rbac_service.remove_user_role(user_id=user_id, role=role)
     return UserRoleListResponse(user_id=user_id, roles=sorted(roles, key=lambda role_name: role_name.value))
 
 
