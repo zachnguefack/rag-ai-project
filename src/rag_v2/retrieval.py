@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 
 from .embeddings import EmbeddingManager
 from .store import VectorStore
+
+
+LOGGER = logging.getLogger("rag_v2.retrieval")
 
 
 class RAGRetriever:
@@ -33,10 +37,20 @@ class RAGRetriever:
             return []
 
         qvec = self.embedding_manager.embed_query(query).astype(np.float32).tolist()
+        normalized_filter = self._normalize_where(metadata_filter)
+        LOGGER.info(
+            "Vector query collection=%s top_k=%s threshold=%.4f has_filter=%s",
+            self.vector_store.collection_name,
+            max(top_k, 1),
+            score_threshold,
+            bool(normalized_filter),
+        )
+        LOGGER.debug("Vector query filter=%s", normalized_filter)
+
         rows = self.vector_store.collection.query(
             query_embeddings=[qvec],
             n_results=max(top_k, 1),
-            where=self._normalize_where(metadata_filter),
+            where=normalized_filter,
         )
 
         docs = rows.get("documents", [[]])[0]
@@ -62,4 +76,9 @@ class RAGRetriever:
             )
 
         output.sort(key=lambda x: x["similarity_score"], reverse=True)
+        LOGGER.info(
+            "Vector query results before_threshold=%s after_threshold=%s",
+            len(ids),
+            len(output),
+        )
         return output

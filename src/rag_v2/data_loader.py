@@ -54,6 +54,9 @@ class DocumentIngestionPipeline:
         md["source"] = str(resolved)
         md["source_path"] = str(resolved)
         md["document_name"] = source_file.name
+        # Use filename stem as canonical internal document ID when no explicit metadata exists.
+        # This keeps retrieval filters (document_id) aligned with registry records for department ingestion.
+        md["document_id"] = str(md.get("document_id") or source_file.stem)
         if department_id:
             md["department_id"] = department_id
         md["file_name"] = source_file.name

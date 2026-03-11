@@ -143,3 +143,16 @@ Retrieval sequence:
 - `GET /api/v1/admin/users/{user_id}/document-scope`
 
 Use these endpoints in Swagger to test inheritance (department documents), grants, and revocations.
+
+
+### Retrieval troubleshooting notes
+
+If a user can list a document via `GET /api/v1/documents` but receives no retrieval evidence (`no_scores`) from `/api/v1/chat/ask` or `/api/v1/rag/query`, validate:
+
+1. The vector collection configured for runtime matches the collection used during indexing.
+2. Chunks exist for that document source in the vector store.
+3. Chunk metadata includes `department_id` and `document_id` matching the registry document.
+4. Any source-path constraints are compatible with chunk metadata keys (`source` and/or `source_path`).
+5. Similarity thresholds are not excluding all candidates.
+
+Operationally, `indexed=true` is a registry-level indexing completion flag and should be correlated with vector chunk presence and metadata completeness when debugging retrieval gaps.

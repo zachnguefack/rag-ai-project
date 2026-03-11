@@ -190,4 +190,18 @@ All under `/api/v1/admin`:
 - Admin assignment endpoints require `MANAGE_USERS` permission.
 - Retrieval also strips unauthorized citations as defense in depth.
 
+
+### Retrieval scope parity and `indexed=true` semantics
+
+- `GET /api/v1/documents` is metadata-registry scoped (SQLite document records + ACL scope).
+- `POST /api/v1/chat/ask` and `POST /api/v1/rag/query` are vector-retrieval scoped and use the same ACL scope translated into vector metadata filters.
+- For retrieval to work, vector chunks must include at least: `department_id`, `document_id`, and `source` metadata.
+- `indexed=true` should be interpreted as: indexing job completed for the document version and chunks were expected to be persisted in the configured vector collection; retrieval can still fail if metadata mapping is inconsistent.
+
+Common causes of `confidence.details.reason = "no_scores"`:
+- Authorized scope exists in metadata DB, but chunk metadata is missing `document_id` or has a mismatched value.
+- Retrieval filter uses a metadata key that does not exist in vector chunks (for example `source_path` vs `source`).
+- Score threshold is too strict for the query/language/content.
+- Document was marked indexed in registry but the expected collection has no chunks for that source.
+
 - [Enterprise RAG persistence refactor](docs/enterprise_rag_persistence_refactor.md)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +71,21 @@ class DepartmentIngestionService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=self._allowed_roots_error())
         return candidate
 
+
+    @staticmethod
+    def _sanitize_document_id(value: str) -> str:
+        normalized = re.sub(r"[^a-zA-Z0-9._-]+", "-", (value or "").strip()).strip("-._").lower()
+        return normalized or f"doc-{uuid4().hex[:12]}"
+
+    def _build_document_id(self, source_path: Path) -> str:
+        base = self._sanitize_document_id(source_path.stem)
+        candidate = base
+        suffix = 1
+        while self._documents.get(candidate) is not None:
+            suffix += 1
+            candidate = f"{base}-{suffix}"
+        return candidate
+
     def _checksum(self, path: Path) -> str:
         h = hashlib.sha256()
         with path.open("rb") as fh:
@@ -80,7 +96,7 @@ class DepartmentIngestionService:
     def _register_file(self, *, department_id: str, owner: str, source_path: Path, storage_path: Path, content_type: str = "") -> DocumentRecord:
         now = datetime.now(timezone.utc)
         content = storage_path.read_text(encoding="utf-8", errors="ignore")
-        doc_id = f"doc-{uuid4().hex[:12]}"
+        doc_id = self._build_document_id(source_path)
         ext = storage_path.suffix.lower().lstrip(".") or "file"
         checksum = self._checksum(storage_path)
         metadata = DocumentMetadata(
