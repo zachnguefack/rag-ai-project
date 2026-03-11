@@ -39,11 +39,13 @@ class RAGRetriever:
         qvec = self.embedding_manager.embed_query(query).astype(np.float32).tolist()
         normalized_filter = self._normalize_where(metadata_filter)
         LOGGER.info(
-            "Vector query collection=%s top_k=%s threshold=%.4f has_filter=%s",
+            "Vector query collection=%s top_k=%s threshold=%.4f has_filter=%s query=%r embedding_dim=%s",
             self.vector_store.collection_name,
             max(top_k, 1),
             score_threshold,
             bool(normalized_filter),
+            query,
+            len(qvec),
         )
         LOGGER.debug("Vector query filter=%s", normalized_filter)
 
@@ -76,9 +78,11 @@ class RAGRetriever:
             )
 
         output.sort(key=lambda x: x["similarity_score"], reverse=True)
+        similarities = [row["similarity_score"] for row in output]
         LOGGER.info(
-            "Vector query results before_threshold=%s after_threshold=%s",
+            "Vector query results before_threshold=%s after_threshold=%s similarities=%s",
             len(ids),
             len(output),
+            similarities,
         )
         return output

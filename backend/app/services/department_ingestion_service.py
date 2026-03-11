@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
+from rag_v2.document_ids import normalize_document_id
 
 from app.config.settings import BackendSettings, load_settings
 from app.database.repositories.document_repo import DocumentRepository
@@ -74,7 +74,7 @@ class DepartmentIngestionService:
 
     @staticmethod
     def _sanitize_document_id(value: str) -> str:
-        normalized = re.sub(r"[^a-zA-Z0-9._-]+", "-", (value or "").strip()).strip("-._").lower()
+        normalized = normalize_document_id(value)
         return normalized or f"doc-{uuid4().hex[:12]}"
 
     def _build_document_id(self, source_path: Path) -> str:

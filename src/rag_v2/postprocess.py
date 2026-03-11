@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import math
+import logging
 import re
 from typing import Any, Dict, List, Optional, Set
 
 
 _TOKEN_RE = re.compile(r"[^a-z0-9àâäçéèêëîïôöùûüœæ'\s-]+")
+LOGGER = logging.getLogger("rag_v2.postprocess")
 
 
 def _tokenize(text: str) -> Set[str]:
@@ -106,4 +108,13 @@ def retrieve_postprocessed(
     raw = rag_retriever.retrieve(query, top_k=top_k_retrieve, score_threshold=score_threshold, metadata_filter=metadata_filter)
     deduped = dedup_results_by_source_page(raw, max_per_source=max_per_source, max_per_page=max_per_page)
     ranked = rank_with_hybrid_score(deduped, query)
-    return mmr_select(ranked, k=final_k, lambda_mult=lambda_mult)
+    selected = mmr_select(ranked, k=final_k, lambda_mult=lambda_mult)
+    LOGGER.info(
+        "Postprocess retrieval query=%r raw=%s deduped=%s ranked=%s selected=%s",
+        query,
+        len(raw),
+        len(deduped),
+        len(ranked),
+        len(selected),
+    )
+    return selected

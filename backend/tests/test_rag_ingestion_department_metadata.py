@@ -19,6 +19,7 @@ def test_ingestion_adds_department_document_and_source_metadata(tmp_path: Path) 
     metadata = docs[0].metadata
     assert metadata["department_id"] == "dept-it"
     assert metadata["document_name"] == "policy_it.md"
+    assert metadata["title"] == "policy_it"
     assert metadata["document_id"] == "policy_it"
     assert metadata["source_path"] == str(policy.resolve())
 

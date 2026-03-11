@@ -11,6 +11,8 @@ from langchain_community.document_loaders import CSVLoader, Docx2txtLoader, PyMu
 from langchain_community.document_loaders.excel import UnstructuredExcelLoader
 from langchain_core.documents import Document
 
+from .document_ids import normalize_document_id
+
 try:
     import pandas as pd
 except Exception:  # optional dependency
@@ -54,9 +56,11 @@ class DocumentIngestionPipeline:
         md["source"] = str(resolved)
         md["source_path"] = str(resolved)
         md["document_name"] = source_file.name
+        md["title"] = str(md.get("title") or source_file.stem)
         # Use filename stem as canonical internal document ID when no explicit metadata exists.
         # This keeps retrieval filters (document_id) aligned with registry records for department ingestion.
-        md["document_id"] = str(md.get("document_id") or source_file.stem)
+        raw_document_id = str(md.get("document_id") or source_file.stem)
+        md["document_id"] = normalize_document_id(raw_document_id) or source_file.stem.lower()
         if department_id:
             md["department_id"] = department_id
         md["file_name"] = source_file.name

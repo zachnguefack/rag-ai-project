@@ -73,7 +73,6 @@ class RAGApplicationService:
             strict_document_scope=strict_scope,
         )
         response = self._rag_service.answer(question=question, policy=policy, metadata_filter=metadata_filter)
-        response["citations"] = [str(citation) for citation in response.get("citations", [])]
         return response
 
 
