@@ -63,10 +63,38 @@ class RBACService:
         return list(record.roles)
 
     def replace_user_roles(self, user_id: str, roles: list[RoleName]) -> list[RoleName]:
+        for role in roles:
+            self._roles.get(role)
         record = self._users.set_roles(user_id=user_id, roles=roles)
         if record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
         return list(record.roles)
+
+    def assign_user_role(self, user_id: str, role: RoleName) -> list[RoleName]:
+        record = self._users.get(user_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+        self._roles.get(role)
+        next_roles = list(record.roles)
+        if role not in next_roles:
+            next_roles.append(role)
+        updated = self._users.set_roles(user_id=user_id, roles=next_roles)
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        return list(updated.roles)
+
+    def remove_user_role(self, user_id: str, role: RoleName) -> list[RoleName]:
+        record = self._users.get(user_id)
+        if record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+        self._roles.get(role)
+        next_roles = [item for item in record.roles if item != role]
+        updated = self._users.set_roles(user_id=user_id, roles=next_roles)
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        return list(updated.roles)
 
     def validate_permission(self, user: User, permission: Permission) -> PermissionCheckResult:
         granted = permission in user.permissions
