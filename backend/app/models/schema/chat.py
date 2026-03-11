@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -15,4 +17,4 @@ class QueryResponse(BaseModel):
     source_type: str
     doc_grounded: bool
     confidence: dict
-    citations: list[str]
+    citations: list[dict[str, Any] | str]

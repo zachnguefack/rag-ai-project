@@ -130,6 +130,32 @@ class SecureAccessModelTests(unittest.TestCase):
             )
         )
 
+        self.documents.upsert(
+            DocumentRecord(
+                document_id="sop-it-0002-backup-restore-validation",
+                title="SOP-IT-0002 Backup Restore Validation",
+                department_id="dept-operations",
+                document_type="pdf",
+                owner="u-ops",
+                classification="internal",
+                status="active",
+                storage_path="/tmp/SOP-IT-0002_Backup_Restore_Validation.pdf",
+                versions=[
+                    DocumentVersionRecord(
+                        version=1,
+                        content="Restore validation steps",
+                        metadata=DocumentMetadata(
+                            department_id="dept-operations",
+                            owner="u-ops",
+                            classification="internal",
+                            document_type="pdf",
+                            status="active",
+                        ),
+                    )
+                ],
+            )
+        )
+
         self.user_ops = User(
             user_id="u-ops",
             username="ops",
@@ -177,15 +203,10 @@ class SecureAccessModelTests(unittest.TestCase):
             department_id="dept-operations",
         )
 
-        self.assertEqual(
-            fake.calls[-1]["metadata_filter"],
-            {
-                "$and": [
-                    {"department_id": {"$in": ["dept-operations"]}},
-                    {"document_id": {"$in": ["doc-ops"]}},
-                ]
-            },
-        )
+        metadata_filter = fake.calls[-1]["metadata_filter"]
+        self.assertEqual(metadata_filter["$and"][0], {"department_id": {"$in": ["dept-operations"]}})
+        doc_scope = metadata_filter["$and"][1]["$or"][0]["document_id"]["$in"]
+        self.assertIn("doc-ops", doc_scope)
 
 
     def test_allow_list_filter_supports_source_and_source_path_keys(self) -> None:
@@ -216,15 +237,8 @@ class SecureAccessModelTests(unittest.TestCase):
         scope_or = metadata_filter["$and"][1]["$or"]
         doc_scope = scope_or[0]["document_id"]["$in"]
         self.assertIn("doc-ops", doc_scope)
-        self.assertEqual(
-            scope_or[1],
-            {
-                "$or": [
-                    {"source_path": {"$in": ["/tmp/doc-ops.md"]}},
-                    {"source": {"$in": ["/tmp/doc-ops.md"]}},
-                ]
-            },
-        )
+        self.assertIn("/tmp/doc-ops.md", scope_or[1]["$or"][0]["source_path"]["$in"])
+        self.assertIn("/tmp/doc-ops.md", scope_or[1]["$or"][1]["source"]["$in"])
 
     def test_empty_authorized_scope_returns_safe_empty_result_without_query(self) -> None:
         fake = FakeRetrievalService()
@@ -241,6 +255,44 @@ class SecureAccessModelTests(unittest.TestCase):
 
         self.assertEqual(fake.calls, [])
         self.assertIn("No relevant information", result["answer"])
+
+    def test_secure_retriever_expands_document_id_candidates_for_filter(self) -> None:
+        fake = FakeRetrievalService()
+        retriever = SecureRetriever(fake, self.access_service)
+
+        retriever.retrieve(
+            question="restore validation",
+            user=self.user_ops,
+            mode="balanced",
+            strict_document_scope=False,
+            document_ids=["sop-it-0002-backup-restore-validation"],
+        )
+
+        metadata_filter = fake.calls[-1]["metadata_filter"]
+        doc_candidates = metadata_filter["$and"][1]["$or"][0]["document_id"]["$in"]
+        self.assertIn("sop-it-0002-backup-restore-validation", doc_candidates)
+        self.assertIn("sop_it_0002_backup_restore_validation", doc_candidates)
+
+    def test_secure_retriever_keeps_citations_with_noncanonical_document_labels(self) -> None:
+        class CitationService(FakeRetrievalService):
+            def query(self, *, question: str, mode: str, strict_document_scope: bool | None, metadata_filter: dict | None) -> dict:
+                self.calls.append({"question": question, "mode": mode, "strict_document_scope": strict_document_scope, "metadata_filter": metadata_filter})
+                return {
+                    "answer": "answer",
+                    "citations": [{"document": "SOP-IT-0002_Backup_Restore_Validation.pdf"}],
+                    "confidence": {"score": 0.7},
+                }
+
+        fake = CitationService()
+        retriever = SecureRetriever(fake, self.access_service)
+        result = retriever.retrieve(
+            question="restore validation",
+            user=self.user_ops,
+            mode="balanced",
+            strict_document_scope=False,
+            document_ids=["sop-it-0002-backup-restore-validation"],
+        )
+        self.assertEqual(len(result["citations"]), 1)
 
 
     def test_requesting_unauthorized_document_id_is_forbidden(self) -> None:

@@ -3,10 +3,19 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, List, Tuple
 
+from .document_ids import normalize_document_id
+
 
 def _citation_key(metadata: Dict[str, Any]) -> Tuple[str, Any, Any]:
-    label = metadata.get("doc_title") or metadata.get("doc_id") or os.path.basename(str(metadata.get("source", ""))) or "Document"
-    return label, metadata.get("page"), metadata.get("chunk_index")
+    label = (
+        metadata.get("title")
+        or metadata.get("document_name")
+        or metadata.get("doc_title")
+        or metadata.get("doc_id")
+        or os.path.basename(str(metadata.get("source", "")))
+        or "Document"
+    )
+    return str(label), metadata.get("page"), metadata.get("chunk_index")
 
 
 def extract_citations(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -27,6 +36,7 @@ def extract_citations(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             {
                 "ref": f"C{c_idx}",
                 "document": label,
+                "document_id": str(md.get("document_id") or normalize_document_id(label)),
                 "page": page_display if page_display is not None else "—",
                 "chunk_index": chunk_index if chunk_index is not None else "—",
             }

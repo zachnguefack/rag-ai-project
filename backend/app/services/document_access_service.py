@@ -30,6 +30,14 @@ class DocumentAccessService:
     def compute_authorized_document_ids(self, user: User) -> list[str]:
         return self._scope_builder.build_authorized_scope(user_id=user.user_id, department_ids=list(user.effective_department_ids))
 
+    def resolve_document_sources(self, document_ids: list[str]) -> list[str]:
+        sources: list[str] = []
+        for document_id in document_ids:
+            record = self._documents.get(document_id)
+            if record and record.storage_path:
+                sources.append(record.storage_path)
+        return sorted(set(sources))
+
     def can_access_document(self, user: User, document_id: str) -> bool:
         if self._rbac.validate_permission(user, Permission.READ_DOCUMENT).granted is False:
             return False
