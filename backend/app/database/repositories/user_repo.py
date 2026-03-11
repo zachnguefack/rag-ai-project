@@ -48,7 +48,7 @@ class UserRepository:
         email: str,
         password_hash: str,
         roles: list[RoleName],
-        department_id: str = "dept-general",
+        department_id: str = "",
     ) -> UserRecord:
         user_id = f"u-{secrets.token_hex(8)}"
         record = UserRecord(
@@ -58,7 +58,7 @@ class UserRepository:
             password_hash=password_hash,
             roles=roles,
             department_id=department_id,
-            department_ids=[department_id],
+            department_ids=[department_id] if department_id else [],
         )
         self._records[user_id] = record
         return record
@@ -69,7 +69,7 @@ class UserRepository:
             username=record.username,
             email=str(record.email),
             department_id=record.department_id,
-            department_ids=tuple(record.department_ids or [record.department_id]),
+            department_ids=tuple(record.department_ids),
             is_active=record.is_active,
             roles=roles,
             document_allow_list=frozenset(record.document_allow_list),

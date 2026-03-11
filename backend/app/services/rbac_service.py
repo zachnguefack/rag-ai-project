@@ -38,9 +38,14 @@ class RBACService:
 
         roles = tuple(self._roles.get(role_name) for role_name in record.roles)
         user = self._users.hydrate(record, roles)
-        assigned_departments = [entry.department_id for entry in self._department_access.list_departments_for_user(user_id)]
+        assigned_departments = [
+            entry.department_id
+            for entry in self._department_access.list_departments_for_user(user_id)
+            if entry.department_id
+        ]
         if assigned_departments:
-            user.department_ids = tuple(sorted(set([user.department_id, *assigned_departments])))
+            user.department_ids = tuple(sorted(set(assigned_departments)))
+            user.department_id = user.department_ids[0]
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is disabled.")
         return user

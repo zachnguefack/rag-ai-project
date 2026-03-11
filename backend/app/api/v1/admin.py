@@ -328,6 +328,8 @@ def assign_user_department(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found.')
     department = department_service.get_department(department_id)
     access = user_department_access_repository.assign(user_id=user_id, department_id=department.department_id, assigned_by=current_user.user_id)
+    # Keep legacy primary department aligned with RBAC membership for backward compatibility.
+    user_repository.set_department(user_id, department.department_id)
     return UserDepartmentAccessResponse(**access.model_dump())
 
 

@@ -250,10 +250,18 @@ def get_document_service(
     return _runtime_document_service
 
 
-def get_auth_service(settings: BackendSettings = Depends(get_settings)) -> AuthService:
+def get_auth_service(
+    settings: BackendSettings = Depends(get_settings),
+    user_repository: UserRepository = Depends(get_user_repository),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> AuthService:
     global _runtime_auth
     if _runtime_auth is None:
-        _runtime_auth = AuthService(settings=settings)
+        _runtime_auth = AuthService(
+            settings=settings,
+            user_repository=user_repository,
+            user_department_access_repository=user_department_access_repository,
+        )
     return _runtime_auth
 
 
