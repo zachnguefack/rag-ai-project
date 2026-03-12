@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from typing import List
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
@@ -460,7 +460,7 @@ def delete_department(department_id: str, current_user: User = Depends(get_curre
 @require_permissions(Permission.MANAGE_USERS)
 async def ingest_department_upload(
     department_id: str,
-    files: List[UploadFile] = File(..., description="One or multiple files to ingest."),
+    files: Annotated[list[UploadFile], File(..., description="One or multiple files to ingest.")],
     current_user: User = Depends(get_current_user),
     ingestion_service: DepartmentIngestionService = Depends(get_department_ingestion_service),
 ) -> DepartmentUploadResultResponse:
