@@ -23,10 +23,11 @@ class RouteGuard:
 class RBACMiddleware(BaseHTTPMiddleware):
     """Enterprise-style deny-by-default RBAC gate for protected API routes."""
 
-    def __init__(self, app, rbac_service: RBACService, auth_service: AuthService):
+    def __init__(self, app, rbac_service: RBACService, auth_service: AuthService, allow_header_identity: bool = True):
         super().__init__(app)
         self._rbac = rbac_service
         self._auth = auth_service
+        self._allow_header_identity = allow_header_identity
         self._guards = (
             RouteGuard(
                 method="POST",
@@ -96,6 +97,8 @@ class RBACMiddleware(BaseHTTPMiddleware):
         try:
             x_user_id = request.headers.get("x-user-id")
             if x_user_id:
+                if not self._allow_header_identity:
+                    raise HTTPException(status_code=401, detail="X-User-Id header is disabled in this environment.")
                 user = self._rbac.resolve_user(x_user_id)
             else:
                 authorization = request.headers.get("authorization")

@@ -313,12 +313,16 @@ def get_current_user(
     credentials=Security(bearer_scheme),
     auth_service: AuthService = Depends(get_auth_service),
     rbac_service: RBACService = Depends(get_rbac_service),
+    settings: BackendSettings = Depends(get_settings),
 ) -> User:
     existing_user = getattr(request.state, "current_user", None)
     if existing_user is not None:
         return existing_user
 
     if x_user_id:
+        allow_header_identity = settings.allow_unauthenticated or settings.app_env.lower() in {"development", "dev", "local", "test"}
+        if not allow_header_identity:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="X-User-Id header is disabled in this environment.")
         user = rbac_service.resolve_user(x_user_id)
         request.state.current_user = user
         return user

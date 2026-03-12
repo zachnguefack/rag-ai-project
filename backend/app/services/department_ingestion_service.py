@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import shutil
 from datetime import datetime, timezone
@@ -19,6 +20,9 @@ from app.security.policies import Permission
 from app.services.department_service import DepartmentService
 from app.services.rag_service import RAGApplicationService
 from app.services.rbac_service import RBACService
+
+
+LOGGER = logging.getLogger("app.department_ingestion")
 
 
 class DepartmentIngestionService:
@@ -181,6 +185,7 @@ class DepartmentIngestionService:
         _, dept_dir = self._department_dir(department_id)
         docs: list[DocumentRecord] = []
         unsupported_files: list[str] = []
+        normalized_files: list[tuple[UploadFile, str]] = []
 
         for file in files:
             filename = Path(file.filename or f"file-{uuid4().hex}").name
@@ -188,7 +193,19 @@ class DepartmentIngestionService:
             if suffix not in self._supported:
                 unsupported_files.append(filename)
                 continue
+            normalized_files.append((file, filename))
 
+        if unsupported_files:
+            for file in files:
+                await file.close()
+            supported = ", ".join(sorted(self._supported))
+            file_list = ", ".join(sorted(unsupported_files))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file type(s): {file_list}. Supported extensions: {supported}",
+            )
+
+        for file, filename in normalized_files:
             payload = await file.read()
             self._enforce_upload_size_limit(payload=payload, filename=filename)
 
@@ -196,16 +213,11 @@ class DepartmentIngestionService:
             try:
                 target.write_bytes(payload)
             except OSError as exc:
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed filesystem write for {filename}: {exc}") from exc
+                LOGGER.exception("Department upload write failed department_id=%s filename=%s", department_id, filename)
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed filesystem write for {filename}.") from exc
+            finally:
+                await file.close()
             docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=Path(filename), storage_path=target, content_type=file.content_type or ""))
-
-        if unsupported_files:
-            supported = ", ".join(sorted(self._supported))
-            file_list = ", ".join(sorted(unsupported_files))
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type(s): {file_list}. Supported extensions: {supported}",
-            )
 
         if not docs:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid files were uploaded.")
@@ -214,7 +226,8 @@ class DepartmentIngestionService:
             result = self._index_and_finalize(docs, department_id)
             return DepartmentUploadResultResponse(**result.model_dump(), uploaded_files=self._department_service.list_department_files(department_id))
         except Exception as exc:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ingestion pipeline failed: {exc}") from exc
+            LOGGER.exception("Department ingestion pipeline failed department_id=%s uploaded_count=%s", department_id, len(docs))
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ingestion pipeline failed.") from exc
 
     def ingest_file_path(self, *, user: User, department_id: str, file_path: str) -> DepartmentIngestionResponse:
         self._enforce_admin(user)
