@@ -80,11 +80,49 @@ class UserRepository:
             row = conn.execute("SELECT COUNT(*) AS total FROM users").fetchone()
         return int(row["total"])
 
+    def list(self) -> list[UserRecord]:
+        with self._store.connection() as conn:
+            rows = conn.execute("SELECT * FROM users ORDER BY username ASC").fetchall()
+        return [self._row_to_record(row) for row in rows]
+
     def set_roles(self, user_id: str, roles: list[RoleName]) -> UserRecord | None:
         record = self.get(user_id)
         if record is None:
             return None
         record.roles = roles
+        return self._upsert(record)
+
+    def set_password_hash(self, user_id: str, password_hash: str) -> UserRecord | None:
+        record = self.get(user_id)
+        if record is None:
+            return None
+        record.password_hash = password_hash
+        return self._upsert(record)
+
+    def set_active(self, user_id: str, is_active: bool) -> UserRecord | None:
+        record = self.get(user_id)
+        if record is None:
+            return None
+        record.is_active = is_active
+        return self._upsert(record)
+
+    def update_profile(
+        self,
+        user_id: str,
+        *,
+        username: str | None = None,
+        email: str | None = None,
+        is_active: bool | None = None,
+    ) -> UserRecord | None:
+        record = self.get(user_id)
+        if record is None:
+            return None
+        if username is not None:
+            record.username = username
+        if email is not None:
+            record.email = email
+        if is_active is not None:
+            record.is_active = is_active
         return self._upsert(record)
 
     def set_department(self, user_id: str, department_id: str) -> UserRecord | None:

@@ -25,6 +25,7 @@ from app.services.rbac_service import RBACService
 from app.services.retrieval_service import RetrievalService
 from app.services.scope_builder_service import ScopeBuilderService
 from app.services.secure_retriever import SecureRetriever
+from app.services.user_service import UserService
 
 _runtime_settings: BackendSettings | None = None
 _runtime_service: RAGApplicationService | None = None
@@ -45,6 +46,7 @@ _runtime_retrieval_service: RetrievalService | None = None
 _runtime_secure_retriever: SecureRetriever | None = None
 _runtime_ingestion_service: IngestionService | None = None
 _runtime_ingest_job_repo: IngestJobRepository | None = None
+_runtime_user_service: UserService | None = None
 _runtime_sqlite_store: SQLiteStore | None = None
 
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
@@ -262,6 +264,23 @@ def get_document_service(
             audit_service,
         )
     return _runtime_document_service
+
+
+
+
+def get_user_service(
+    user_repository: UserRepository = Depends(get_user_repository),
+    department_repository: DepartmentRepository = Depends(get_department_repository),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> UserService:
+    global _runtime_user_service
+    if _runtime_user_service is None:
+        _runtime_user_service = UserService(
+            user_repository=user_repository,
+            department_repository=department_repository,
+            user_department_access_repository=user_department_access_repository,
+        )
+    return _runtime_user_service
 
 
 def get_auth_service(

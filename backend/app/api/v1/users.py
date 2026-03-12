@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_current_user, get_rbac_service, validate_api_key
+from app.api.deps import get_current_user, get_rbac_service, get_user_service, validate_api_key
 from app.models.domain.user import User
+from app.models.schema.admin import ChangeOwnPasswordRequest, PasswordChangeResponse
 from app.models.schema.auth import MeResponse, UserPermissionsResponse
 from app.models.schema.common import ErrorResponse
 from app.security.policies import Permission
 from app.services.rbac_service import RBACService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -49,3 +51,24 @@ def my_permissions(
         permissions=sorted(permission.value for permission in current_user.permissions),
         roles=sorted(role.value for role in current_user.role_names),
     )
+
+
+@router.post(
+    '/change-password',
+    response_model=PasswordChangeResponse,
+    summary="Change own password",
+    description="Allows an authenticated user to change their own password by providing current and new password.",
+    responses={401: {"model": ErrorResponse}, 400: {"model": ErrorResponse}},
+    dependencies=[Depends(validate_api_key)],
+)
+def change_own_password(
+    payload: ChangeOwnPasswordRequest,
+    current_user: User = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
+) -> PasswordChangeResponse:
+    user_service.change_own_password(
+        user_id=current_user.user_id,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+    return PasswordChangeResponse()

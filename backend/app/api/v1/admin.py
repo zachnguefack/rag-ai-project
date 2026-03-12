@@ -15,12 +15,19 @@ from app.api.deps import (
     get_user_department_access_repository,
     get_rbac_service,
     get_user_repository,
+    get_user_service,
     validate_api_key,
 )
 from app.database.repositories.user_repo import UserRepository
 from app.database.repositories.user_department_access_repo import UserDepartmentAccessRepository
 from app.models.domain.user import User
 from app.models.schema.admin import (
+    AdminUserCreateRequest,
+    AdminUserListResponse,
+    AdminUserPatchRequest,
+    AdminUserPasswordResetRequest,
+    AdminUserResponse,
+    AdminUserUpdateRequest,
     DepartmentCreateRequest,
     DepartmentDeleteResponse,
     DepartmentIngestFilePathRequest,
@@ -45,6 +52,7 @@ from app.models.schema.admin import (
     UserDocumentScopeResponse,
     UserRoleListResponse,
     UserRoleReplaceRequest,
+    PasswordChangeResponse,
 )
 from app.models.schema.audit import AuditLogListResponse, AuditLogResponse
 from app.models.schema.common import ErrorResponse
@@ -65,6 +73,7 @@ from app.services.document_access_service import DocumentAccessService
 from app.api.deps import get_document_service
 from app.services.document_service import DocumentService
 from app.services.rbac_service import RBACService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -140,6 +149,191 @@ def get_role(role: RoleName, current_user: User = Depends(get_current_user), rba
 def list_permissions(current_user: User = Depends(get_current_user), rbac_service: RBACService = Depends(get_rbac_service)) -> PermissionListResponse:
     rbac_service.enforce_permission(current_user, Permission.MANAGE_ROLES)
     return PermissionListResponse(permissions=sorted(Permission, key=lambda p: p.value))
+
+
+
+
+def _to_admin_user_response(record, user_department_access_repository: UserDepartmentAccessRepository) -> AdminUserResponse:
+    department_ids = [item.department_id for item in user_department_access_repository.list_departments_for_user(record.user_id)]
+    normalized_department_ids = list(dict.fromkeys(dep for dep in department_ids if dep))
+    if not normalized_department_ids:
+        normalized_department_ids = [dep for dep in record.department_ids if dep]
+    primary_department_id = normalized_department_ids[0] if normalized_department_ids else (record.department_id or "")
+    return AdminUserResponse(
+        user_id=record.user_id,
+        username=record.username,
+        email=record.email,
+        is_active=record.is_active,
+        department_id=primary_department_id,
+        department_ids=normalized_department_ids,
+        roles=sorted(record.roles, key=lambda role: role.value),
+    )
+
+
+@router.get('/users', response_model=AdminUserListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin Users"], summary="List users")
+@require_permissions(Permission.MANAGE_USERS)
+def list_users(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    username: str | None = Query(default=None),
+    email: str | None = Query(default=None),
+    is_active: bool | None = Query(default=None),
+    department_id: str | None = Query(default=None),
+    role: RoleName | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_service: UserService = Depends(get_user_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> AdminUserListResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    records = user_service.list_users()
+
+    if username:
+        records = [item for item in records if username.lower() in item.username.lower()]
+    if email:
+        records = [item for item in records if email.lower() in str(item.email).lower()]
+    if is_active is not None:
+        records = [item for item in records if item.is_active is is_active]
+    if role is not None:
+        records = [item for item in records if role in item.roles]
+    if department_id:
+        scoped_records = []
+        for item in records:
+            departments = {entry.department_id for entry in user_department_access_repository.list_departments_for_user(item.user_id)}
+            if not departments:
+                departments = set(dep for dep in item.department_ids if dep)
+            if not departments and item.department_id:
+                departments = {item.department_id}
+            if department_id in departments:
+                scoped_records.append(item)
+        records = scoped_records
+
+    count = len(records)
+    page = records[offset : offset + limit]
+    return AdminUserListResponse(
+        items=[_to_admin_user_response(item, user_department_access_repository) for item in page],
+        count=count,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get('/users/{user_id}', response_model=AdminUserResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin Users"], summary="Get user detail")
+@require_permissions(Permission.MANAGE_USERS)
+def get_user_detail(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_service: UserService = Depends(get_user_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> AdminUserResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    record = user_service.get_user(user_id)
+    return _to_admin_user_response(record, user_department_access_repository)
+
+
+@router.post('/users', response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin Users"], summary="Create user (admin)")
+@require_permissions(Permission.MANAGE_USERS)
+def create_user_admin(
+    payload: AdminUserCreateRequest,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_service: UserService = Depends(get_user_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> AdminUserResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    created = user_service.create_user(
+        username=payload.username,
+        email=str(payload.email),
+        password=payload.password,
+        roles=payload.roles,
+        department_ids=payload.department_ids,
+        is_active=payload.is_active,
+        actor_user_id=current_user.user_id,
+    )
+    return _to_admin_user_response(created, user_department_access_repository)
+
+
+@router.put('/users/{user_id}', response_model=AdminUserResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin Users"], summary="Update user")
+@require_permissions(Permission.MANAGE_USERS)
+def update_user_admin(
+    user_id: str,
+    payload: AdminUserUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_service: UserService = Depends(get_user_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> AdminUserResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    updated = user_service.update_user(
+        user_id,
+        username=payload.username,
+        email=str(payload.email),
+        is_active=payload.is_active,
+    )
+    return _to_admin_user_response(updated, user_department_access_repository)
+
+
+@router.patch('/users/{user_id}', response_model=AdminUserResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin Users"], summary="Partially update user")
+@require_permissions(Permission.MANAGE_USERS)
+def patch_user_admin(
+    user_id: str,
+    payload: AdminUserPatchRequest,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_service: UserService = Depends(get_user_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> AdminUserResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    updated = user_service.update_user(
+        user_id,
+        username=payload.username,
+        email=str(payload.email) if payload.email is not None else None,
+        is_active=payload.is_active,
+    )
+    return _to_admin_user_response(updated, user_department_access_repository)
+
+
+@router.post('/users/{user_id}/deactivate', response_model=AdminUserResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin Users"], summary="Deactivate user")
+@require_permissions(Permission.MANAGE_USERS)
+def deactivate_user_admin(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_service: UserService = Depends(get_user_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> AdminUserResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    updated = user_service.set_active(user_id, False)
+    return _to_admin_user_response(updated, user_department_access_repository)
+
+
+@router.post('/users/{user_id}/activate', response_model=AdminUserResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin Users"], summary="Activate user")
+@require_permissions(Permission.MANAGE_USERS)
+def activate_user_admin(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_service: UserService = Depends(get_user_service),
+    user_department_access_repository: UserDepartmentAccessRepository = Depends(get_user_department_access_repository),
+) -> AdminUserResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    updated = user_service.set_active(user_id, True)
+    return _to_admin_user_response(updated, user_department_access_repository)
+
+
+@router.post('/users/{user_id}/reset-password', response_model=PasswordChangeResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Admin Users"], summary="Reset user password")
+@require_permissions(Permission.MANAGE_USERS)
+def reset_password_admin(
+    user_id: str,
+    payload: AdminUserPasswordResetRequest,
+    current_user: User = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
+    user_service: UserService = Depends(get_user_service),
+) -> PasswordChangeResponse:
+    rbac_service.enforce_permission(current_user, Permission.MANAGE_USERS)
+    user_service.reset_password(user_id=user_id, new_password=payload.new_password)
+    return PasswordChangeResponse(message="Password reset successfully.")
 
 
 @router.get('/users/{user_id}/roles', response_model=UserRoleListResponse, dependencies=[Depends(validate_api_key), Depends(get_current_user)], tags=["Roles & Permissions"])

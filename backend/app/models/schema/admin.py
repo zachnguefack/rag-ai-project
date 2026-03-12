@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 from app.security.policies import Permission, RoleName
 
@@ -35,6 +35,57 @@ class RolePermissionsUpdateRequest(BaseModel):
     permissions: list[Permission] = Field(
         ..., examples=[[Permission.READ_DOCUMENT, Permission.SEARCH_DOCUMENT]]
     )
+
+
+class AdminUserResponse(BaseModel):
+    user_id: str = Field(..., examples=["u-standard"])
+    username: str = Field(..., examples=["jane.doe"])
+    email: EmailStr = Field(..., examples=["jane.doe@example.com"])
+    is_active: bool = Field(..., examples=[True])
+    department_id: str = Field(default="", examples=["operations"])
+    department_ids: list[str] = Field(default_factory=list, examples=[["operations", "it"]])
+    roles: list[RoleName] = Field(default_factory=list)
+
+
+class AdminUserListResponse(BaseModel):
+    items: list[AdminUserResponse] = Field(default_factory=list)
+    count: int = Field(default=0)
+    limit: int = Field(default=50)
+    offset: int = Field(default=0)
+
+
+class AdminUserCreateRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=64, examples=["jane.doe"])
+    email: EmailStr = Field(..., examples=["jane.doe@example.com"])
+    password: str = Field(..., min_length=8, max_length=128, examples=["Str0ngPassw0rd!"])
+    is_active: bool = Field(default=True)
+    department_ids: list[str] = Field(default_factory=list, examples=[["operations"]])
+    roles: list[RoleName] = Field(default_factory=lambda: [RoleName.STANDARD_USER])
+
+
+class AdminUserUpdateRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=64, examples=["jane.doe"])
+    email: EmailStr = Field(..., examples=["jane.doe@example.com"])
+    is_active: bool = Field(default=True)
+
+
+class AdminUserPatchRequest(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=64, examples=["jane.doe"])
+    email: EmailStr | None = Field(default=None, examples=["jane.doe@example.com"])
+    is_active: bool | None = None
+
+
+class AdminUserPasswordResetRequest(BaseModel):
+    new_password: str = Field(..., min_length=8, max_length=128, examples=["N3wPassw0rd!"])
+
+
+class ChangeOwnPasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class PasswordChangeResponse(BaseModel):
+    message: str = Field(default="Password changed successfully.")
 
 
 class RBACMatrixEntry(BaseModel):
