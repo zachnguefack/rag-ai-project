@@ -61,40 +61,52 @@ def get_settings() -> BackendSettings:
 
 def get_sqlite_store(settings: BackendSettings = Depends(get_settings)) -> SQLiteStore:
     global _runtime_sqlite_store
+    if not isinstance(settings, BackendSettings):
+        settings = get_settings()
     if _runtime_sqlite_store is None:
         _runtime_sqlite_store = SQLiteStore(settings.metadata_db_path)
     return _runtime_sqlite_store
 
 def get_document_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> DocumentRepository:
     global _runtime_document_repo
+    if not isinstance(store, SQLiteStore):
+        store = get_sqlite_store(get_settings())
     if _runtime_document_repo is None:
         _runtime_document_repo = DocumentRepository(store)
     return _runtime_document_repo
 
 
-def get_user_repository() -> UserRepository:
+def get_user_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> UserRepository:
     global _runtime_user_repo
+    if not isinstance(store, SQLiteStore):
+        store = get_sqlite_store(get_settings())
     if _runtime_user_repo is None:
-        _runtime_user_repo = UserRepository()
+        _runtime_user_repo = UserRepository(store)
     return _runtime_user_repo
 
 
 def get_department_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> DepartmentRepository:
     global _runtime_department_repo
+    if not isinstance(store, SQLiteStore):
+        store = get_sqlite_store(get_settings())
     if _runtime_department_repo is None:
         _runtime_department_repo = DepartmentRepository(store)
     return _runtime_department_repo
 
 
-def get_user_document_access_repository() -> UserDocumentAccessRepository:
+def get_user_document_access_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> UserDocumentAccessRepository:
     global _runtime_user_document_access_repo
+    if not isinstance(store, SQLiteStore):
+        store = get_sqlite_store(get_settings())
     if _runtime_user_document_access_repo is None:
-        _runtime_user_document_access_repo = UserDocumentAccessRepository()
+        _runtime_user_document_access_repo = UserDocumentAccessRepository(store)
     return _runtime_user_document_access_repo
 
 
 def get_user_department_access_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> UserDepartmentAccessRepository:
     global _runtime_user_department_access_repo
+    if not isinstance(store, SQLiteStore):
+        store = get_sqlite_store(get_settings())
     if _runtime_user_department_access_repo is None:
         _runtime_user_department_access_repo = UserDepartmentAccessRepository(store)
     return _runtime_user_department_access_repo
@@ -113,6 +125,8 @@ def get_scope_builder_service(
 
 def get_ingest_job_repository(store: SQLiteStore = Depends(get_sqlite_store)) -> IngestJobRepository:
     global _runtime_ingest_job_repo
+    if not isinstance(store, SQLiteStore):
+        store = get_sqlite_store(get_settings())
     if _runtime_ingest_job_repo is None:
         _runtime_ingest_job_repo = IngestJobRepository(store)
     return _runtime_ingest_job_repo

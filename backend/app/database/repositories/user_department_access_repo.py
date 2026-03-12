@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
-import tempfile
-from uuid import uuid4
-
-from app.database.sqlite import SQLiteStore
+from app.database.sqlite import SQLiteStore, get_default_sqlite_store
 from app.models.persistence.user_department_access import UserDepartmentAccessRecord
 
 
 class UserDepartmentAccessRepository:
     def __init__(self, store: SQLiteStore | None = None) -> None:
-        self._store = store or SQLiteStore(Path(tempfile.gettempdir()) / f"rag-metadata-{uuid4().hex}.db")
+        self._store = store or get_default_sqlite_store()
 
     @staticmethod
     def _row_to_record(row) -> UserDepartmentAccessRecord:

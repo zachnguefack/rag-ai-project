@@ -20,12 +20,13 @@ class AuthDepartmentResolutionTests(unittest.TestCase):
         self.store = SQLiteStore(Path(tempfile.gettempdir()) / "rag-auth-dept-resolution-test.db")
         with self.store.connection() as conn:
             conn.execute("DELETE FROM user_department_access")
+            conn.execute("DELETE FROM user_document_access")
+            conn.execute("DELETE FROM users")
             conn.execute("DELETE FROM departments")
 
         self.departments = DepartmentRepository(self.store)
         self.department_access = UserDepartmentAccessRepository(self.store)
-        self.users = UserRepository()
-        UserRepository._records = {}
+        self.users = UserRepository(self.store)
 
         self.departments.upsert(
             DepartmentRecord(

@@ -6,6 +6,11 @@ from fastapi import FastAPI
 
 from app.api.v1.router import build_v1_router
 from app.bootstrap.dev_rbac_seed import seed_dev_rbac_users
+from app.database.repositories.document_repo import DocumentRepository
+from app.database.repositories.user_department_access_repo import UserDepartmentAccessRepository
+from app.database.repositories.user_document_access_repo import UserDocumentAccessRepository
+from app.database.repositories.user_repo import UserRepository
+from app.database.sqlite import SQLiteStore
 from app.bootstrap.dev_seed_dataset import seed_dev_dataset
 from app.config.settings import BackendSettings, load_settings
 from app.security.middleware import RBACMiddleware
@@ -50,9 +55,24 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
         openapi_tags=OPENAPI_TAGS,
     )
 
+    store = SQLiteStore(runtime_settings.metadata_db_path)
+    user_repository = UserRepository(store)
+    document_repository = DocumentRepository(store)
+    user_document_access_repository = UserDocumentAccessRepository(store)
+    user_department_access_repository = UserDepartmentAccessRepository(store)
+
     service = RAGApplicationService(runtime_settings)
-    rbac_service = RBACService()
-    auth_service = AuthService(settings=runtime_settings)
+    rbac_service = RBACService(
+        user_repository=user_repository,
+        document_repository=document_repository,
+        user_document_access_repository=user_document_access_repository,
+        user_department_access_repository=user_department_access_repository,
+    )
+    auth_service = AuthService(
+        settings=runtime_settings,
+        user_repository=user_repository,
+        user_department_access_repository=user_department_access_repository,
+    )
 
     def service_dependency() -> RAGApplicationService:
         return service

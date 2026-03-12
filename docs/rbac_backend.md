@@ -156,3 +156,22 @@ If a user can list a document via `GET /api/v1/documents` but receives no retrie
 5. Similarity thresholds are not excluding all candidates.
 
 Operationally, `indexed=true` is a registry-level indexing completion flag and should be correlated with vector chunk presence and metadata completeness when debugging retrieval gaps.
+
+## Persistence model (SQLite)
+
+RBAC and configuration state is persisted in the SQLite metadata database (`RAG_METADATA_DB_PATH`, default `./data/metadata.db`).
+
+Persisted tables and purpose:
+
+- `users`: user identity, password hash, active state, primary department, department list cache, and role assignments.
+- `departments`: department catalog.
+- `user_department_access`: explicit user-to-department assignments.
+- `documents`: document metadata and ownership department.
+- `user_document_access`: explicit user-to-document grants and revocations.
+- `ingest_jobs`: ingestion job status tracking.
+
+Notes:
+
+- Role-permission definitions remain static in code (`app/security/policies.py`).
+- Development bootstrap seeding is idempotent and only runs when no users are present.
+- Because RBAC assignments are in SQLite, department assignments, role assignments, and document grants survive application restart when the same metadata DB file is reused.
