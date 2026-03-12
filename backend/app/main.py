@@ -101,7 +101,13 @@ def create_app(settings: BackendSettings | None = None) -> FastAPI:
         seed_dev_dataset(settings=runtime_settings)
         logger.info("[STARTUP] Application startup completed")
 
-    app.add_middleware(RBACMiddleware, rbac_service=rbac_service, auth_service=auth_service)
+    allow_header_identity = runtime_settings.allow_unauthenticated or runtime_settings.app_env.lower() in {"development", "dev", "local", "test"}
+    app.add_middleware(
+        RBACMiddleware,
+        rbac_service=rbac_service,
+        auth_service=auth_service,
+        allow_header_identity=allow_header_identity,
+    )
     app.include_router(build_v1_router(), prefix='/api/v1')
     return app
 
