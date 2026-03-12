@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
+
+_DEFAULT_METADATA_DB_PATH = Path(os.getenv("RAG_METADATA_DB_PATH", "./data/metadata.db"))
+_DEFAULT_STORES: dict[Path, "SQLiteStore"] = {}
 
 
 class SQLiteStore:
@@ -43,6 +47,22 @@ class SQLiteStore:
                     description TEXT DEFAULT '',
                     created_at TEXT NOT NULL,
                     is_active INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT UNIQUE NOT NULL,
+                    username TEXT UNIQUE NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    department_id TEXT DEFAULT '',
+                    department_ids_json TEXT DEFAULT '[]',
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    roles_json TEXT DEFAULT '[]',
+                    document_allow_list_json TEXT DEFAULT '[]'
                 )
                 """
             )
@@ -99,6 +119,29 @@ class SQLiteStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_document_access (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    document_id TEXT NOT NULL,
+                    granted_by TEXT NOT NULL,
+                    granted_at TEXT NOT NULL,
+                    revoked_at TEXT,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    UNIQUE(user_id, document_id)
+                )
+                """
+            )
+
+
+def get_default_sqlite_store() -> SQLiteStore:
+    path = _DEFAULT_METADATA_DB_PATH
+    store = _DEFAULT_STORES.get(path)
+    if store is None:
+        store = SQLiteStore(path)
+        _DEFAULT_STORES[path] = store
+    return store
 
 
 def dumps_json(value: object) -> str:

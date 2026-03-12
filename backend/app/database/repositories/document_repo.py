@@ -2,17 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pathlib import Path
-import tempfile
-from uuid import uuid4
-
-from app.database.sqlite import SQLiteStore, dumps_json, loads_json
+from app.database.sqlite import SQLiteStore, get_default_sqlite_store, dumps_json, loads_json
 from app.models.persistence.document import DocumentRecord, DocumentVersionRecord
 
 
 class DocumentRepository:
     def __init__(self, store: SQLiteStore | None = None) -> None:
-        self._store = store or SQLiteStore(Path(tempfile.gettempdir()) / f"rag-metadata-{uuid4().hex}.db")
+        self._store = store or get_default_sqlite_store()
 
     def _row_to_record(self, row) -> DocumentRecord:
         versions = [DocumentVersionRecord.model_validate(item) for item in loads_json(row["versions_json"], [])]

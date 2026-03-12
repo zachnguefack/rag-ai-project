@@ -19,7 +19,6 @@ from app.api.deps import (
 from app.config.settings import BackendSettings
 from app.models.persistence.department import DepartmentRecord
 from app.models.persistence.document import DocumentMetadata, DocumentRecord, DocumentVersionRecord
-from app.models.persistence.user import UserRecord
 from app.security.password import hash_password
 from app.security.policies import RoleName
 
@@ -225,7 +224,7 @@ def seed_dev_dataset(settings: BackendSettings) -> None:
 
     password_hash = hash_password(_DEV_PASSWORD)
     for account in _USERS:
-        user_repo._records[str(account["user_id"])] = UserRecord(
+        user_repo.create_with_id(
             user_id=str(account["user_id"]),
             username=str(account["username"]),
             email=str(account["email"]),

@@ -11,7 +11,6 @@ from app.api.v1.router import build_v1_router
 from app.config.settings import BackendSettings
 from app.models.domain.role import Role
 from app.models.domain.user import User
-from app.models.persistence.user import UserRecord
 from app.security.policies import Permission, RoleName
 
 
@@ -48,14 +47,13 @@ def _build_client(tmp_path: Path) -> TestClient:
     app.dependency_overrides[deps.get_rag_service] = lambda: None
 
     user_repo = deps.get_user_repository()
-    user_repo._records["u-target"] = UserRecord(
+    user_repo.create_with_id(
         user_id="u-target",
         username="john",
         email="john@example.com",
         password_hash="hashed",
         roles=[RoleName.STANDARD_USER],
         department_id="dept-general",
-        department_ids=["dept-general"],
     )
 
     return TestClient(app)
@@ -188,14 +186,13 @@ def _build_client_with_real_rbac(tmp_path: Path) -> TestClient:
     app.dependency_overrides[deps.get_rag_service] = lambda: None
 
     user_repo = deps.get_user_repository()
-    user_repo._records["u-target"] = UserRecord(
+    user_repo.create_with_id(
         user_id="u-target",
         username="john",
         email="john@example.com",
         password_hash="hashed",
         roles=[RoleName.STANDARD_USER],
         department_id="dept-general",
-        department_ids=["dept-general"],
     )
 
     return TestClient(app)
