@@ -1,3 +1,5 @@
+"""Ingestion job tracking wrapper around the RAG indexing pipeline."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -9,6 +11,7 @@ from app.services.rag_service import RAGApplicationService
 
 
 class IngestionService:
+    """Execute indexing jobs and persist operational status for admins."""
     def __init__(self, rag_service: RAGApplicationService, ingest_job_repo: IngestJobRepository | None = None) -> None:
         self._rag_service = rag_service
         self._jobs = ingest_job_repo or IngestJobRepository()

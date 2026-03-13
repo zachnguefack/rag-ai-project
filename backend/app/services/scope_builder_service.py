@@ -1,3 +1,5 @@
+"""Document scope computation service for department + explicit grant access control."""
+
 from __future__ import annotations
 
 from app.database.repositories.document_repo import DocumentRepository
@@ -6,6 +8,7 @@ from app.database.repositories.user_document_access_repo import UserDocumentAcce
 
 
 class ScopeBuilderService:
+    """Build effective authorized document ids for a user."""
     def __init__(
         self,
         document_repository: DocumentRepository | None = None,
@@ -17,6 +20,7 @@ class ScopeBuilderService:
         self._department_access = user_department_access_repository or UserDepartmentAccessRepository()
 
     def build_authorized_scope(self, *, user_id: str, department_ids: list[str]) -> list[str]:
+        """Compute document scope as department union explicit grants minus revocations."""
         user_department_ids = {record.department_id for record in self._department_access.list_departments_for_user(user_id)}
         effective_departments = user_department_ids | set(department_ids)
         dept_document_ids: set[str] = set()

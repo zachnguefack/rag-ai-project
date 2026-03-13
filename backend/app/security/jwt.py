@@ -1,3 +1,5 @@
+"""Minimal HMAC JWT utilities for access token creation/validation."""
+
 from __future__ import annotations
 
 import base64
@@ -33,6 +35,7 @@ def _b64url_decode(raw: str) -> bytes:
 
 
 def create_access_token(subject: str, secret: str, expires_in_minutes: int) -> tuple[str, datetime]:
+    """Create a signed JWT-like bearer token with required identity claims."""
     issued_at = datetime.now(UTC)
     expires_at = issued_at + timedelta(minutes=expires_in_minutes)
     payload = {
@@ -54,6 +57,7 @@ def create_access_token(subject: str, secret: str, expires_in_minutes: int) -> t
 
 
 def decode_access_token(token: str, secret: str) -> TokenPayload:
+    """Validate signature/expiry/claims and return structured token payload."""
     parts = token.split(".")
     if len(parts) != 3:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token format.")

@@ -1,3 +1,9 @@
+"""Authentication service for JWT login and user identity hydration.
+
+This module centralizes credential validation, token issuance/revocation, and
+department-aware user hydration used by API dependencies and middleware.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -20,6 +26,8 @@ LOGGER = logging.getLogger("app.auth")
 
 
 class AuthService:
+    """Handle registration, login, token lifecycle, and hydrated user resolution."""
+
     def __init__(
         self,
         settings: BackendSettings,
@@ -57,6 +65,13 @@ class AuthService:
 
 
     def _resolve_department_membership(self, record: UserRecord) -> tuple[str, tuple[str, ...]]:
+        """Resolve primary + effective departments from RBAC assignments with legacy fallback.
+
+        Preference order:
+        1. Explicit rows in ``user_department_access``.
+        2. Legacy ``department_ids`` snapshot on the user record.
+        3. Legacy single ``department_id`` field.
+        """
         assigned_departments = [
             entry.department_id
             for entry in self._department_access.list_departments_for_user(record.user_id)
@@ -84,6 +99,7 @@ class AuthService:
         return "", tuple()
 
     def hydrate_user(self, record: UserRecord) -> User:
+        """Convert persistence model to runtime identity used in authorization checks."""
         roles = tuple(self._roles.get(role_name) for role_name in record.roles)
         primary_department_id, department_ids = self._resolve_department_membership(record)
         user = self._users.hydrate(record, roles)
@@ -94,6 +110,7 @@ class AuthService:
         return user
 
     def issue_access_token(self, user: UserRecord) -> tuple[str, datetime]:
+        """Issue an HMAC-signed short-lived access token for the authenticated user."""
         return create_access_token(
             subject=user.user_id,
             secret=self._settings.jwt_secret_key,
@@ -101,6 +118,7 @@ class AuthService:
         )
 
     def resolve_user_from_token(self, token: str) -> User:
+        """Decode, validate, and hydrate a user from a bearer token."""
         payload = decode_access_token(token, secret=self._settings.jwt_secret_key)
         if payload.token_id in self._revoked_token_ids:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has been revoked.")
@@ -112,5 +130,6 @@ class AuthService:
         return self.hydrate_user(record)
 
     def revoke_token(self, token: str) -> None:
+        """Store token id in an in-memory denylist for explicit logout support."""
         payload = decode_access_token(token, secret=self._settings.jwt_secret_key)
         self._revoked_token_ids.add(payload.token_id)

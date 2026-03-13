@@ -1,3 +1,5 @@
+"""Document access service for scope resolution and grant management."""
+
 from __future__ import annotations
 
 from fastapi import HTTPException, status
@@ -12,6 +14,7 @@ from app.services.scope_builder_service import ScopeBuilderService
 
 
 class DocumentAccessService:
+    """Provide effective document scope and explicit grant/revoke operations."""
     def __init__(
         self,
         document_repository: DocumentRepository | None = None,
@@ -28,6 +31,7 @@ class DocumentAccessService:
         self._rbac = rbac_service or RBACService(document_repository=self._documents)
 
     def compute_authorized_document_ids(self, user: User) -> list[str]:
+        """Return effective internal document ids the user is allowed to access."""
         return self._scope_builder.build_authorized_scope(user_id=user.user_id, department_ids=list(user.effective_department_ids))
 
     def resolve_document_sources(self, document_ids: list[str]) -> list[str]:

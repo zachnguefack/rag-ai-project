@@ -1,3 +1,5 @@
+"""Authorization-aware retrieval orchestrator for secure RAG queries."""
+
 from __future__ import annotations
 
 import logging
@@ -82,6 +84,7 @@ class SecureRetriever:
         department_id: str | None = None,
         document_ids: list[str] | None = None,
     ) -> dict[str, Any]:
+        """Run retrieval with strict ACL metadata filtering and citation sanitization."""
         user_departments = set(user.effective_department_ids)
         if department_id is not None and department_id not in user_departments:
             raise HTTPException(

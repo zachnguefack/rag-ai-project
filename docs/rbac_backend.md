@@ -1,6 +1,10 @@
-# RBAC for RAG Backend
+# RBAC and Access Control for the FastAPI Backend
+
+This document describes how authorization is implemented in the running backend (`backend/app`) and how to validate behavior from Swagger or tests.
 
 ## Roles and permissions
+
+Role/permission policy is code-defined in `backend/app/security/policies.py` and enforced through `RBACService` + route dependencies/middleware.
 
 | Role | Core permissions |
 |---|---|
@@ -11,167 +15,72 @@
 | System Administrator | Document Admin + `manage:users`, `manage:roles`, `manage:system` |
 | Super Administrator | All permissions |
 
-The source of truth for this matrix is `app/security/policies.py`.
+## Authentication and identity sources
 
-## Validation flow
+The API supports both identity paths:
 
-1. `RBACMiddleware` resolves identity from `X-User-Id` (local/dev) or `Authorization: Bearer <token>`.
-2. Route decorators (`@require_roles`, `@require_permissions`) define RBAC claims on endpoints.
-3. Middleware and endpoint-level RBAC enforcement verify required permissions.
-4. Document-level checks are executed via `RBACService.enforce_document_access` (deny-by-default).
+1. **JWT bearer token** from `POST /api/v1/auth/login`.
+2. **`X-User-Id` header** for local/dev/test simulation.
 
-## Swagger usage (`/docs`)
+`X-User-Id` is rejected outside local/dev/test-style environments unless unauthenticated mode is enabled (`RAG_ALLOW_UNAUTHENTICATED=true`).
 
-Swagger supports all configured security schemes:
+## Enforcement flow
 
-- `x-api-key` for backend API key enforcement.
-- `Authorization: Bearer <token>` for JWT-authenticated users.
-- `X-User-Id` for local/dev identity simulation when testing RBAC flows.
+1. `RBACMiddleware` applies route-guard prechecks for high-risk endpoints.
+2. `get_current_user` resolves identity (middleware cache -> `X-User-Id` -> bearer token).
+3. Route-level permission checks (`@require_permissions`) run.
+4. Service-level checks in `RBACService` / `DocumentAccessService` enforce deny-by-default semantics.
 
-### Local/dev quick start in Swagger
+## Department and document access model
 
-1. Open `/docs`.
-2. Expand **Authorize** and provide `x-api-key` if required by environment.
-3. Authenticate with `POST /api/v1/auth/login` using one of the development RBAC test accounts below and paste the JWT as `Bearer <token>`.
-4. Call endpoints in the **Roles & Permissions** section.
+The backend uses multi-department scope resolution:
 
-## Development RBAC test accounts
+- Users may belong to **multiple departments** (`user_department_access`).
+- Users may have explicit per-document grants/revocations (`user_document_access`).
 
-When `APP_ENV=development` or `RAG_DEV_BOOTSTRAP_USERS=true`, the backend seeds default RBAC users on startup **only if no users already exist**. This bootstrap is skipped in production-oriented environments by default.
+Effective scope formula:
 
-| Username   | Email                 | Password         | Role                   |
-| ---------- | --------------------- | ---------------- | ---------------------- |
-| admin      | admin@local.dev       | Admin123!        | Super Administrator    |
-| sysadmin   | sysadmin@local.dev    | Admin123!        | System Administrator   |
-| docadmin   | docadmin@local.dev    | Admin123!        | Document Administrator |
-| poweruser  | poweruser@local.dev   | Admin123!        | Power User             |
-| compliance | compliance@local.dev  | Compliance123!   | Compliance Officer     |
-| user       | user@local.dev        | User123!         | Standard User          |
+`authorized_document_ids = docs_in_assigned_departments UNION active_explicit_grants MINUS revoked_grants`
 
-These accounts are intended for local development and Swagger RBAC testing only. Passwords are hashed before persistence by the backend security layer.
+This computed scope is reused by:
 
-## Admin RBAC endpoints
+- `GET /api/v1/documents` style metadata operations.
+- `POST /api/v1/rag/query` and `POST /api/v1/chat/ask` retrieval filters.
 
-All endpoints below are under `/api/v1/admin`, tagged as **Roles & Permissions**, and require `manage:roles`.
+## Admin endpoints relevant to RBAC/access
 
-- `GET /roles` — list all roles and permissions.
-- `GET /roles/{role}` — get one role with permissions.
-- `GET /permissions` — list all permissions.
-- `GET /users/{user_id}/roles` — list user role assignments.
-- `PUT /users/{user_id}/roles` — replace a user's full role set.
-- `PUT /roles/{role}/permissions` — returns `400` because policy is immutable in API.
-- `GET /rbac/matrix` — returns role→permission matrix from `policies.py`.
-- `POST /rbac/validate` — validate permission + optional document-level access for a user.
+All endpoints are under `/api/v1/admin`.
 
-### Example: replace user roles
+### Roles & permissions
+- `GET /roles`
+- `GET /roles/{role}`
+- `GET /permissions`
+- `GET /users/{user_id}/roles`
+- `PUT /users/{user_id}/roles`
+- `POST /users/{user_id}/roles/{role}`
+- `DELETE /users/{user_id}/roles/{role}`
+- `GET /rbac/matrix`
+- `POST /rbac/validate`
+- `PUT /roles/{role}/permissions` (immutable policy endpoint -> `400`)
 
-`PUT /api/v1/admin/users/u-standard/roles`
+### Department/document access administration
+- `POST /users/{user_id}/departments/{department_id}`
+- `DELETE /users/{user_id}/departments/{department_id}`
+- `GET /users/{user_id}/departments`
+- `GET /departments/{department_id}/users`
+- `POST /users/{user_id}/document-access`
+- `GET /users/{user_id}/document-access`
+- `DELETE /users/{user_id}/document-access/{document_id}`
+- `GET /users/{user_id}/document-scope`
 
-```json
-{
-  "roles": ["standard_user", "power_user"]
-}
-```
+## Troubleshooting retrieval authorization
 
-Response:
+If metadata endpoints show documents but RAG returns no evidence:
 
-```json
-{
-  "user_id": "u-standard",
-  "roles": ["power_user", "standard_user"]
-}
-```
+1. Confirm the same vector collection is used for ingestion and query runtime.
+2. Confirm vector chunks exist for those sources.
+3. Confirm chunk metadata includes `department_id` + `document_id`.
+4. Confirm metadata key parity (`source`, `source_path`) with filter construction.
+5. Confirm similarity threshold/top-k settings are not too strict.
 
-### Example: validate access with optional document checks
-
-`POST /api/v1/admin/rbac/validate`
-
-```json
-{
-  "user_id": "u-power",
-  "permission": "read:document",
-  "document_id": "doc-public"
-}
-```
-
-Response:
-
-```json
-{
-  "user_id": "u-power",
-  "permission": "read:document",
-  "document_id": "doc-public",
-  "allowed": true,
-  "reason": "role=power_user"
-}
-```
-
-If `document_id` is provided, validation uses `RBACService.enforce_document_access` and remains deny-by-default.
-
-## Department-based document access model
-
-This backend now applies a department-first secure access model for RAG retrieval:
-
-- User access baseline: all documents in the user's `department_id`.
-- Optional explicit grants: specific document IDs added per user.
-- Optional revocations: explicit grants can be revoked and removed from final scope.
-- Deny-by-default: any document outside computed scope is denied.
-
-Final scope formula:
-
-`authorized_document_ids = documents_of_user_department + user_explicit_document_grants - revoked_document_grants`
-
-Retrieval sequence:
-
-1. Authenticate user.
-2. Resolve user department.
-3. Compute authorized scope.
-4. Run retrieval only on authorized `document_id` values.
-5. Keep strict document scope behavior for no-evidence responses.
-
-### New admin endpoints
-
-- `GET /api/v1/admin/departments`
-- `POST /api/v1/admin/departments`
-- `GET /api/v1/admin/departments/{department_id}`
-- `GET /api/v1/admin/departments/{department_id}/documents`
-  - Returns lightweight document listing metadata (no `content` field) including file/storage references for UI management.
-- `PUT /api/v1/admin/users/{user_id}/department`
-- `POST /api/v1/admin/users/{user_id}/document-access`
-- `GET /api/v1/admin/users/{user_id}/document-access`
-- `DELETE /api/v1/admin/users/{user_id}/document-access/{document_id}`
-- `GET /api/v1/admin/users/{user_id}/document-scope`
-
-Use these endpoints in Swagger to test inheritance (department documents), grants, and revocations.
-
-
-### Retrieval troubleshooting notes
-
-If a user can list a document via `GET /api/v1/documents` but receives no retrieval evidence (`no_scores`) from `/api/v1/chat/ask` or `/api/v1/rag/query`, validate:
-
-1. The vector collection configured for runtime matches the collection used during indexing.
-2. Chunks exist for that document source in the vector store.
-3. Chunk metadata includes `department_id` and `document_id` matching the registry document.
-4. Any source-path constraints are compatible with chunk metadata keys (`source` and/or `source_path`).
-5. Similarity thresholds are not excluding all candidates.
-
-Operationally, `indexed=true` is a registry-level indexing completion flag and should be correlated with vector chunk presence and metadata completeness when debugging retrieval gaps.
-
-## Persistence model (SQLite)
-
-RBAC and configuration state is persisted in the SQLite metadata database (`RAG_METADATA_DB_PATH`, default `./data/metadata.db`).
-
-Persisted tables and purpose:
-
-- `users`: user identity, password hash, active state, primary department, department list cache, and role assignments.
-- `departments`: department catalog.
-- `user_department_access`: explicit user-to-department assignments.
-- `documents`: document metadata and ownership department.
-- `user_document_access`: explicit user-to-document grants and revocations.
-- `ingest_jobs`: ingestion job status tracking.
-
-Notes:
-
-- Role-permission definitions remain static in code (`app/security/policies.py`).
-- Development bootstrap seeding is idempotent and only runs when no users are present.
-- Because RBAC assignments are in SQLite, department assignments, role assignments, and document grants survive application restart when the same metadata DB file is reused.
+`indexed=true` indicates indexing completion in metadata records; it should be correlated with chunk presence in the configured collection.

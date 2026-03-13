@@ -1,3 +1,9 @@
+"""Security middleware enforcing route-level RBAC prechecks.
+
+Middleware pre-hydrates authenticated identity and applies targeted route guards
+for high-risk operations before endpoint handlers execute.
+"""
+
 from __future__ import annotations
 
 import re

@@ -138,11 +138,12 @@ Document access control for retrieval:
 
 ## Enterprise FastAPI backend blueprint
 
-For a production-ready enterprise backend architecture (API, security, RBAC, document management, RAG engine, vector DB, audit logging, and configuration management), see:
+For backend architecture and operations documentation, see:
 
-- `docs/enterprise_fastapi_backend_architecture.md`
-
-- `docs/backend_runtime_deployment.md`
+- `docs/backend_developer_guide.md` (current implementation guide)
+- `docs/rbac_backend.md` (RBAC and access-control details)
+- `docs/enterprise_fastapi_backend_architecture.md` (reference architecture blueprint)
+- `docs/backend_runtime_deployment.md` (runtime deployment notes)
 
 
 ## Backend RBAC administration in Swagger
