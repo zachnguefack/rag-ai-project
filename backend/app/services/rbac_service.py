@@ -1,3 +1,5 @@
+"""RBAC service for role/permission checks and document-aware authorization."""
+
 from __future__ import annotations
 
 from fastapi import HTTPException, status
@@ -16,6 +18,7 @@ from app.services.scope_builder_service import ScopeBuilderService
 
 
 class RBACService:
+    """Resolve users/roles and enforce permission + document access rules."""
     def __init__(
         self,
         user_repository: UserRepository | None = None,
@@ -32,6 +35,7 @@ class RBACService:
         self._scope_builder = ScopeBuilderService(self._documents, self._access, self._department_access)
 
     def resolve_user(self, user_id: str) -> User:
+        """Hydrate a user identity with role-derived permissions and departments."""
         record = self._users.get(user_id)
         if record is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unknown user identity.")
@@ -145,6 +149,7 @@ class RBACService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"One of [{readable}] roles is required.")
 
     def enforce_document_access(self, user: User, document_id: str) -> None:
+        """Enforce deny-by-default document read access using computed effective scope."""
         self.enforce_permission(user, Permission.READ_DOCUMENT)
         document = self._documents.get(document_id)
         if document is None:

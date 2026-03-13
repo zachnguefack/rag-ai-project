@@ -1,6 +1,6 @@
 # Enterprise RAG Backend Architecture (FastAPI)
 
-This document proposes a production-ready backend architecture for an enterprise Retrieval-Augmented Generation (RAG) platform implemented with **Python + FastAPI**.
+This document describes the enterprise target architecture for the FastAPI backend. It is a blueprint/reference model; for exact current runtime behavior, use `docs/backend_developer_guide.md` and `docs/rbac_backend.md`.
 
 ## 1) Architecture goals
 

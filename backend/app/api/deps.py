@@ -1,3 +1,9 @@
+"""FastAPI dependency providers for runtime services and authenticated identity.
+
+This module wires singleton-like service instances for the app process and
+contains authentication dependencies used by route handlers.
+"""
+
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, Security, status
@@ -299,6 +305,7 @@ def get_auth_service(
 
 
 def validate_api_key(x_api_key: str | None = Security(api_key_header), settings: BackendSettings = Depends(get_settings)) -> None:
+    """Enforce API key checks when unauthenticated mode is disabled."""
     if settings.allow_unauthenticated:
         return
     if not settings.api_key:
@@ -315,6 +322,11 @@ def get_current_user(
     rbac_service: RBACService = Depends(get_rbac_service),
     settings: BackendSettings = Depends(get_settings),
 ) -> User:
+    """Resolve request identity from middleware cache, dev header, or JWT bearer token.
+
+    `X-User-Id` is intentionally restricted to local/dev/test style environments
+    unless unauthenticated mode is explicitly enabled.
+    """
     existing_user = getattr(request.state, "current_user", None)
     if existing_user is not None:
         return existing_user

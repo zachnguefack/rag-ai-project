@@ -1,3 +1,5 @@
+"""Department ingestion service handling secure upload, registration, and indexing."""
+
 from __future__ import annotations
 
 import hashlib
@@ -26,6 +28,7 @@ LOGGER = logging.getLogger("app.department_ingestion")
 
 
 class DepartmentIngestionService:
+    """Ingest department documents from uploads/filesystem and trigger indexing."""
     def __init__(
         self,
         *,
@@ -44,6 +47,7 @@ class DepartmentIngestionService:
         self._allowed_roots = self._build_allowed_roots()
 
     def _enforce_admin(self, user: User) -> None:
+        """Require elevated permissions for ingestion operations."""
         if self._rbac is not None:
             self._rbac.enforce_permission(user, Permission.INGEST_DOCUMENT)
             self._rbac.enforce_permission(user, Permission.MANAGE_USERS)
@@ -70,6 +74,7 @@ class DepartmentIngestionService:
         return dept.name, target
 
     def _validate_allowed_path(self, path: Path) -> Path:
+        """Block path traversal by enforcing ingest roots allowlist boundaries."""
         candidate = path.expanduser().resolve(strict=False)
         if not any(candidate == root or root in candidate.parents for root in self._allowed_roots):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=self._allowed_roots_error())
@@ -98,6 +103,7 @@ class DepartmentIngestionService:
         return h.hexdigest()
 
     def _register_file(self, *, department_id: str, owner: str, source_path: Path, storage_path: Path, content_type: str = "") -> DocumentRecord:
+        """Create document metadata/version records for an ingested filesystem file."""
         now = datetime.now(timezone.utc)
         content = storage_path.read_text(encoding="utf-8", errors="ignore")
         doc_id = self._build_document_id(source_path)
@@ -158,6 +164,7 @@ class DepartmentIngestionService:
             )
 
     def _index_and_finalize(self, docs: list[DocumentRecord], department_id: str) -> DepartmentIngestionResponse:
+        """Trigger indexing and persist indexed status to metadata records."""
         indexed_files = 0
         indexed_chunks = 0
         if self._rag_service is not None and docs:
@@ -180,6 +187,7 @@ class DepartmentIngestionService:
         )
 
     async def ingest_upload(self, *, user: User, department_id: str, files: list[UploadFile]) -> DepartmentUploadResultResponse:
+        """Upload files to department storage, register metadata, and run indexing."""
         self._enforce_admin(user)
         self._validate_upload_files(files)
         _, dept_dir = self._department_dir(department_id)
