@@ -20,9 +20,12 @@ export const adminApi = {
   departmentDocuments: (id: string) => apiRequest<any>(`/admin/departments/${id}/documents`),
   departmentFiles: (id: string) => apiRequest<any>(`/admin/departments/${id}/files`),
   deleteDepartmentFile: (id: string, filename: string) => apiRequest<any>(`/admin/departments/${id}/files/${filename}`, { method: 'DELETE' }),
-  uploadDepartmentFile: (id: string, file: File) => {
+  uploadDepartmentFile: (id: string, files: File | File[]) => {
     const formData = new FormData();
-    formData.append('file', file);
+    const fileArray = Array.isArray(files) ? files : [files];
+    for (const file of fileArray) {
+      formData.append('files', file);
+    }
     return apiRequest<any>(`/admin/departments/${id}/upload`, { method: 'POST', body: formData });
   },
   ingestFilePath: (id: string, file_path: string) => apiRequest<any>(`/admin/departments/${id}/ingest-file-path`, { method: 'POST', body: JSON.stringify({ file_path }) }),
