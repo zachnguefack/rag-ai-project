@@ -55,7 +55,7 @@ class DepartmentIngestionService:
 
     def _build_allowed_roots(self) -> tuple[Path, ...]:
         configured = [item.strip() for item in self._settings.ingest_allowed_roots.split(os.pathsep) if item.strip()]
-        roots = [Path(item).expanduser().resolve() for item in configured]
+        roots = [self._coerce_filesystem_path(item).expanduser().resolve() for item in configured]
         if not roots:
             roots = [
                 self._settings.data_dir.resolve(),
@@ -79,6 +79,37 @@ class DepartmentIngestionService:
         if not any(candidate == root or root in candidate.parents for root in self._allowed_roots):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=self._allowed_roots_error())
         return candidate
+
+    @staticmethod
+    def _coerce_filesystem_path(raw_path: str) -> Path:
+        """Normalize user-provided paths, including UNC-style separators."""
+        normalized = raw_path.strip()
+        if normalized.startswith("\\\\"):
+            # Convert Windows UNC notation (\\server\share\file) into a path format
+            # pathlib can resolve on POSIX hosts while keeping network semantics.
+            normalized = "//" + normalized.lstrip("\\").replace("\\", "/")
+        return Path(normalized)
+
+    def _copy_to_department(self, *, source: Path, target: Path, department_id: str) -> None:
+        try:
+            if source.resolve() != target.resolve():
+                shutil.copy2(source, target)
+        except PermissionError as exc:
+            LOGGER.exception(
+                "Department ingestion copy permission denied department_id=%s source=%s target=%s",
+                department_id,
+                source,
+                target,
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission denied while accessing {source}") from exc
+        except OSError as exc:
+            LOGGER.exception(
+                "Department ingestion copy failed department_id=%s source=%s target=%s",
+                department_id,
+                source,
+                target,
+            )
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to ingest file from {source}") from exc
 
 
     @staticmethod
@@ -167,6 +198,7 @@ class DepartmentIngestionService:
         """Trigger indexing and persist indexed status to metadata records."""
         indexed_files = 0
         indexed_chunks = 0
+        LOGGER.info("Department ingestion started department_id=%s ingested_documents=%s", department_id, len(docs))
         if self._rag_service is not None and docs:
             summary = self._rag_service.run_indexing(force_reindex=False)
             indexed_files = int(summary.get("indexed_files", 0))
@@ -177,6 +209,14 @@ class DepartmentIngestionService:
                 doc.indexing_status = "indexed"
                 doc.last_indexed_at = datetime.now(timezone.utc)
                 self._documents.upsert(doc)
+
+        LOGGER.info(
+            "Department ingestion completed department_id=%s ingested_documents=%s indexed_files=%s indexed_chunks=%s",
+            department_id,
+            len(docs),
+            indexed_files,
+            indexed_chunks,
+        )
 
         return DepartmentIngestionResponse(
             department_id=department_id,
@@ -225,6 +265,7 @@ class DepartmentIngestionService:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed filesystem write for {filename}.") from exc
             finally:
                 await file.close()
+            LOGGER.info("Department upload saved department_id=%s filename=%s storage_path=%s", department_id, filename, target)
             docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=Path(filename), storage_path=target, content_type=file.content_type or ""))
 
         if not docs:
@@ -239,7 +280,7 @@ class DepartmentIngestionService:
 
     def ingest_file_path(self, *, user: User, department_id: str, file_path: str) -> DepartmentIngestionResponse:
         self._enforce_admin(user)
-        source = self._validate_allowed_path(Path(file_path))
+        source = self._validate_allowed_path(self._coerce_filesystem_path(file_path))
         if not source.exists():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Source file was not found: {source}")
         if not source.is_file():
@@ -248,14 +289,14 @@ class DepartmentIngestionService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type.")
         _, dept_dir = self._department_dir(department_id)
         target = dept_dir / source.name
-        if source.resolve() != target.resolve():
-            shutil.copy2(source, target)
+        self._copy_to_department(source=source, target=target, department_id=department_id)
+        LOGGER.info("Department file-path ingestion accepted department_id=%s source=%s target=%s", department_id, source, target)
         doc = self._register_file(department_id=department_id, owner=user.user_id, source_path=source, storage_path=target)
         return self._index_and_finalize([doc], department_id)
 
     def ingest_folder_path(self, *, user: User, department_id: str, folder_path: str) -> DepartmentIngestionResponse:
         self._enforce_admin(user)
-        source_folder = self._validate_allowed_path(Path(folder_path))
+        source_folder = self._validate_allowed_path(self._coerce_filesystem_path(folder_path))
         if not source_folder.exists():
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Source folder was not found: {source_folder}")
         if not source_folder.is_dir():
@@ -266,8 +307,8 @@ class DepartmentIngestionService:
             if not path.is_file() or path.suffix.lower() not in self._supported:
                 continue
             target = dept_dir / path.name
-            if path.resolve() != target.resolve():
-                shutil.copy2(path, target)
+            self._copy_to_department(source=path, target=target, department_id=department_id)
+            LOGGER.info("Department folder-path ingestion accepted department_id=%s source=%s target=%s", department_id, path, target)
             docs.append(self._register_file(department_id=department_id, owner=user.user_id, source_path=path, storage_path=target))
         if not docs:
             supported = ", ".join(sorted(self._supported))

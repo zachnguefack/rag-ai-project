@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 from tempfile import SpooledTemporaryFile
 
 import pytest
@@ -90,3 +91,51 @@ async def test_upload_with_unsupported_file_has_no_partial_side_effects(tmp_path
 
     assert exc.value.status_code == 400
     assert repo.list() == []
+
+
+def test_ingest_file_path_accepts_unc_style_paths_with_allowed_root(tmp_path: Path) -> None:
+    smb_root = tmp_path / "network" / "server" / "share"
+    smb_root.mkdir(parents=True)
+    source = smb_root / "source.txt"
+    source.write_text("network", encoding="utf-8")
+
+    settings = BackendSettings(
+        data_dir=tmp_path,
+        data_departments_root=tmp_path / "depart",
+        metadata_db_path=tmp_path / "metadata.db",
+        ingest_allowed_roots=f"{tmp_path}{os.pathsep}{smb_root}",
+    )
+    store = SQLiteStore(settings.metadata_db_path)
+    dept_service = DepartmentService(department_repository=DepartmentRepository(store), settings=settings)
+    dept_service.create_department(None, "A", "")
+    service = DepartmentIngestionService(department_service=dept_service, document_repository=DocumentRepository(store), settings=settings)
+
+    unc_path = "\\\\server\\share\\source.txt"
+    mapped_unc = str(source).replace(str(smb_root), "//server/share")
+    assert service._coerce_filesystem_path(unc_path).as_posix() == Path(mapped_unc).as_posix()
+
+
+def test_ingest_file_path_returns_403_for_permission_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = tmp_path / "input.txt"
+    source.write_text("x", encoding="utf-8")
+
+    settings = BackendSettings(
+        data_dir=tmp_path,
+        data_departments_root=tmp_path / "depart",
+        metadata_db_path=tmp_path / "metadata.db",
+        ingest_allowed_roots=str(tmp_path),
+    )
+    store = SQLiteStore(settings.metadata_db_path)
+    dept_service = DepartmentService(department_repository=DepartmentRepository(store), settings=settings)
+    dept_service.create_department(None, "A", "")
+    service = DepartmentIngestionService(department_service=dept_service, document_repository=DocumentRepository(store), settings=settings)
+
+    def _raise_permission(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("app.services.department_ingestion_service.shutil.copy2", _raise_permission)
+
+    with pytest.raises(HTTPException) as exc:
+        service.ingest_file_path(user=_admin_user(), department_id="a", file_path=str(source))
+
+    assert exc.value.status_code == 403
